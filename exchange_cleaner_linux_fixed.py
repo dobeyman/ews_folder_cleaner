@@ -60,44 +60,22 @@ except ImportError:
 # Initialize colorama
 init()
 
-# État du clignotement
-blink_state = 0
-
-# Fonction pour imprimer le logo avec alternance
-def print_logo():
-    """Affiche le logo du programme avec un art ASCII qui alterne"""
-    global blink_state
-    
-    # Logo 1: EWS FOLDER
-    ews_folder_logo = f"""{Fore.CYAN}╔══════════════════════════════════════════════════════════════════════════╗
-{Fore.CYAN}║ {Fore.GREEN}███████╗██╗    ██╗███████╗    ███████╗ ██████╗ ██╗     ██████╗ ███████╗██████╗ {Fore.CYAN}║
-{Fore.CYAN}║ {Fore.GREEN}██╔════╝██║    ██║██╔════╝    ██╔════╝██╔═══██╗██║     ██╔══██╗██╔════╝██╔══██╗{Fore.CYAN}║
-{Fore.CYAN}║ {Fore.GREEN}█████╗  ██║ █╗ ██║███████╗    █████╗  ██║   ██║██║     ██║  ██║█████╗  ██████╔╝{Fore.CYAN}║
-{Fore.CYAN}║ {Fore.GREEN}██╔══╝  ██║███╗██║╚════██║    ██╔══╝  ██║   ██║██║     ██║  ██║██╔══╝  ██╔══██╗{Fore.CYAN}║
-{Fore.CYAN}║ {Fore.GREEN}███████╗╚███╔███╔╝███████║    ██║     ╚██████╔╝███████╗██████╔╝███████╗██║  ██║{Fore.CYAN}║
-{Fore.CYAN}║ {Fore.GREEN}╚══════╝ ╚══╝╚══╝ ╚══════╝    ╚═╝      ╚═════╝ ╚══════╝╚═════╝ ╚══════╝╚═╝  ╚═╝{Fore.CYAN}║
-{Fore.CYAN}║                                                                                    ║
-{Fore.CYAN}║                         {Fore.YELLOW}[ EWS FOLDER CLEANER ]{Fore.CYAN}                     ║
-{Fore.CYAN}╚══════════════════════════════════════════════════════════════════════════╝{Style.RESET_ALL}"""
-    
-    # Logo 2: EWS CLEAN
-    ews_clean_logo = f"""{Fore.CYAN}╔══════════════════════════════════════════════════════════════════════════╗
+# Logo ASCII art - version originale avec caractères Unicode
+ews_logo = f"""{Fore.CYAN}╔══════════════════════════════════════════════════════════════════════════╗
 {Fore.CYAN}║ {Fore.GREEN}███████╗██╗    ██╗███████╗     ██████╗██╗     ███████╗ █████╗ ███╗   ██╗{Fore.CYAN} ║
 {Fore.CYAN}║ {Fore.GREEN}██╔════╝██║    ██║██╔════╝    ██╔════╝██║     ██╔════╝██╔══██╗████╗  ██║{Fore.CYAN} ║
 {Fore.CYAN}║ {Fore.GREEN}█████╗  ██║ █╗ ██║███████╗    ██║     ██║     █████╗  ███████║██╔██╗ ██║{Fore.CYAN} ║
 {Fore.CYAN}║ {Fore.GREEN}██╔══╝  ██║███╗██║╚════██║    ██║     ██║     ██╔══╝  ██╔══██║██║╚██╗██║{Fore.CYAN} ║
 {Fore.CYAN}║ {Fore.GREEN}███████╗╚███╔███╔╝███████║    ╚██████╗███████╗███████╗██║  ██║██║ ╚████║{Fore.CYAN} ║
 {Fore.CYAN}║ {Fore.GREEN}╚══════╝ ╚══╝╚══╝ ╚══════╝     ╚═════╝╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝{Fore.CYAN} ║
-{Fore.CYAN}║                                                                                    ║
-{Fore.CYAN}║                              {Fore.YELLOW}[ EWS CLEAN ]{Fore.CYAN}                          ║
+{Fore.CYAN}║                                                                              ║
+{Fore.CYAN}║                      {Fore.YELLOW}[ Exchange Web Services Cleaner ]{Fore.CYAN}                     ║
 {Fore.CYAN}╚══════════════════════════════════════════════════════════════════════════╝{Style.RESET_ALL}"""
-    
-    # Alterner entre les deux logos
-    logo_to_print = ews_folder_logo if blink_state % 2 == 0 else ews_clean_logo
-    blink_state += 1
-    
-    # Afficher le logo sélectionné
-    print(logo_to_print)
+
+# Fonction pour imprimer le logo
+def print_logo():
+    """Affiche le logo du programme"""
+    print(ews_logo)
 
 # Fonction pour obtenir les identifiants
 def get_credentials():
@@ -526,7 +504,6 @@ def intercept_ews_calls():
             call_type = "unknown"
             call_info = "EWS request"
             
-            # Dans les nouveaux arguments, on trouve généralement 'data' qui contient les info de la requête
             try:
                 if len(args) > 0 and hasattr(args[0], 'tag'):
                     call_type = args[0].tag.localname
@@ -624,9 +601,6 @@ def intercept_ews_calls():
             try:
                 if len(args) > 0 and hasattr(args[0], 'tag'):
                     call_type = args[0].tag.localname
-                    call_info = f"Operation: {call_type}"
-                elif 'data' in kwargs and hasattr(kwargs['data'], 'tag'):
-                    call_type = kwargs['data'].tag.localname
                     call_info = f"Operation: {call_type}"
             except:
                 pass
