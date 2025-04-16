@@ -118,13 +118,26 @@ class EWSStats:
                 self.call_types[call_type] = self.call_types[call_type][-self.max_calls_to_keep:]
             
             # Ajouter un log pour cet appel
-            log_message = f"EWS call: {command_details} - {call_type} - {ms:.2f}ms"
-            ews_logger.add_log(log_message, "INFO")
+            log_level = "INFO"
+            
+            # S'il s'agit d'une erreur, toujours la journaliser comme une erreur
+            if call_type.startswith("error_"):
+                log_level = "ERROR"
+                # Forcer l'ajout de log à l'interface unifiée pour les erreurs
+                if ews_unified_interface and ews_unified_interface.running:
+                    ews_unified_interface.add_log(f"{command_details} - {ms:.2f}ms", log_level)
             
             # Ajouter un log spécial pour les appels lents (plus de 1000ms)
             if ms > 1000:
                 slow_log_message = f"SLOW EWS CALL: {command_details} - {call_type} - {ms:.2f}ms"
                 ews_logger.add_log(slow_log_message, "WARN")
+                # Également ajouter à l'interface unifiée
+                if ews_unified_interface and ews_unified_interface.running:
+                    ews_unified_interface.add_log(slow_log_message, "WARN")
+            
+            # Log standard pour tous les appels
+            log_message = f"EWS call: {command_details} - {call_type} - {ms:.2f}ms"
+            ews_logger.add_log(log_message, log_level)
     
     def start_call(self):
         with self.lock:
@@ -594,7 +607,25 @@ def intercept_ews_calls():
             except Exception as e:
                 elapsed_ms = (time.time() - start_time) * 1000
                 error_message = f"Erreur lors de la suppression d'un élément: {str(e)}"
-                ews_stats.add_call_time(elapsed_ms, f"error_{call_type}", f"Error in {call_info}: {str(e)}")
+                
+                # Spécifier le type d'erreur pour mieux identifier les problèmes
+                error_type = "error_delete"
+                
+                # Log amélioré pour les erreurs avec haute latence
+                if elapsed_ms > 1000:
+                    error_type = "error_delete_slow"
+                    ews_logger.add_log(f"ERREUR LENTE DELETE: {error_message} - {elapsed_ms:.2f}ms", "ERROR")
+                    ews_unified_interface.add_log(f"Erreur de suppression lente détectée: {elapsed_ms:.2f}ms", "ERROR")
+                    
+                    # Pause forcée pour les suppressions lentes
+                    if "mailbox database is temporarily unavailable" in str(e).lower():
+                        print(f"{Fore.RED}Base de données boîte aux lettres temporairement indisponible. Pause de 30s.{Style.RESET_ALL}")
+                        time.sleep(30)
+                    else:
+                        print(f"{Fore.YELLOW}Suppression lente détectée. Pause de 5s.{Style.RESET_ALL}")
+                        time.sleep(5)
+                
+                ews_stats.add_call_time(elapsed_ms, error_type, f"Error in {call_info}: {str(e)}")
                 ews_logger.add_log(error_message, "ERROR")
                 ews_stats.end_call()
                 raise
