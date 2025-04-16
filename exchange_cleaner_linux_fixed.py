@@ -525,16 +525,56 @@ def intercept_ews_calls():
                 elapsed_ms = (time.time() - start_time) * 1000
                 error_message = f"Erreur EWS ({call_type}): {str(e)}"
                 
-                # Spécifiquement rechercher l'erreur de base de données temporairement indisponible
-                if "mailbox database is temporarily unavailable" in str(e).lower():
-                    error_type = f"error_database_{call_type}"
-                    error_details = f"Error in {call_info}: Database temporarily unavailable - {str(e)}"
-                    ews_logger.add_log(f"Erreur de base de données de la boîte aux lettres dans {call_type}: {str(e)}", "ERROR")
-                else:
-                    error_type = f"error_{call_type}"
-                    error_details = f"Error in {call_info}: {str(e)}"
+                # Pour les appels lents mais réussis
+                if elapsed_ms > 1000:
+                    pause_duration = 3  # pause plus courte pour les appels réussis
+                    current_time = datetime.now().strftime("%H:%M:%S")
+                    
+                    # Message de pause avec horodatage
+                    pause_message = f"⚠️ DÉBUT PAUSE DE {pause_duration}s ({current_time}): Opération lente mais réussie - {elapsed_ms:.2f}ms"
+                    print(f"{Fore.YELLOW}{pause_message}{Style.RESET_ALL}")
+                    ews_logger.add_log(pause_message, "WARN")
+                    if ews_unified_interface and ews_unified_interface.running:
+                        ews_unified_interface.add_log(pause_message, "WARN")
+                    
+                    # Exécuter la pause avec vérification
+                    pause_start = time.time()
+                    time.sleep(pause_duration)
+                    actual_pause = time.time() - pause_start
+                    
+                    # Message après la pause
+                    current_time = datetime.now().strftime("%H:%M:%S")
+                    end_pause_message = f"✅ FIN PAUSE ({current_time}): Durée réelle = {actual_pause:.1f}s"
+                    print(f"{Fore.GREEN}{end_pause_message}{Style.RESET_ALL}")
+                    ews_logger.add_log(end_pause_message, "INFO")
+                    if ews_unified_interface and ews_unified_interface.running:
+                        ews_unified_interface.add_log(end_pause_message, "INFO")
                 
-                ews_stats.add_call_time(elapsed_ms, error_type, error_details)
+                # Pour les erreurs de base de données
+                if "mailbox database is temporarily unavailable" in str(e).lower():
+                    pause_duration = 30  # 30 secondes de pause
+                    current_time = datetime.now().strftime("%H:%M:%S")
+                    
+                    # Message AVANT la pause, avec horodatage
+                    pause_message = f"⚠️⚠️ DÉBUT PAUSE DE {pause_duration}s ({current_time}): Base de données indisponible - {elapsed_ms:.2f}ms"
+                    print(f"{Fore.RED}{pause_message}{Style.RESET_ALL}")
+                    # Ajouter le message de pause aux logs et à l'interface avec haute priorité
+                    ews_logger.add_log(pause_message, "ERROR")
+                    ews_unified_interface.add_log(pause_message, "ERROR")
+                    
+                    # Exécuter la pause avec vérification
+                    pause_start = time.time()
+                    time.sleep(pause_duration)
+                    actual_pause = time.time() - pause_start
+                    
+                    # Message APRÈS la pause, avec durée réelle
+                    current_time = datetime.now().strftime("%H:%M:%S")
+                    end_pause_message = f"✅ FIN PAUSE ({current_time}): Durée réelle = {actual_pause:.1f}s"
+                    print(f"{Fore.GREEN}{end_pause_message}{Style.RESET_ALL}")
+                    ews_logger.add_log(end_pause_message, "INFO")
+                    ews_unified_interface.add_log(end_pause_message, "INFO")
+                
+                ews_stats.add_call_time(elapsed_ms, f"error_{call_type}", f"Error in {call_info}: {str(e)}")
                 ews_logger.add_log(error_message, "ERROR")
                 ews_stats.end_call()
                 raise
@@ -600,27 +640,32 @@ def intercept_ews_calls():
             call_info = f"Delete item: {self.__class__.__name__}"
             
             try:
-                result = original_delete(self, *args, **kwargs)
+                response = original_delete(self, *args, **kwargs)
                 elapsed_ms = (time.time() - start_time) * 1000
                 ews_stats.add_call_time(elapsed_ms, call_type, call_info)
+                ews_stats.end_call()
                 
                 # Ajouter une pause pour les appels réussis mais lents
                 if elapsed_ms > 1000:
                     pause_duration = 3  # pause plus courte pour les appels réussis
-                    pause_message = f"⚠️ PAUSE DE {pause_duration}s: Opération de suppression lente mais réussie - {elapsed_ms:.2f}ms"
+                    time_before = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                    pause_message = f"⏱️ DÉBUT PAUSE {time_before} - Suppression lente mais réussie ({elapsed_ms:.0f}ms) - {pause_duration}s d'attente"
                     print(f"{Fore.YELLOW}{pause_message}{Style.RESET_ALL}")
                     ews_logger.add_log(pause_message, "WARN")
-                    if ews_unified_interface and ews_unified_interface.running:
-                        ews_unified_interface.add_log(pause_message, "WARN")
+                    ews_unified_interface.add_log(pause_message, "WARN")
+                    
                     time.sleep(pause_duration)
+                    
+                    time_after = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                    after_message = f"✅ FIN PAUSE {time_after} - Reprise après {pause_duration}s d'attente"
+                    print(f"{Fore.GREEN}{after_message}{Style.RESET_ALL}")
+                    ews_logger.add_log(after_message, "INFO")
+                    ews_unified_interface.add_log(after_message, "INFO")
                 
-                ews_stats.end_call()
-                return result
+                return response
             except Exception as e:
                 elapsed_ms = (time.time() - start_time) * 1000
                 error_message = f"Erreur lors de la suppression d'un élément: {str(e)}"
-                
-                # Spécifier le type d'erreur pour mieux identifier les problèmes
                 error_type = "error_delete"
                 
                 # Log amélioré pour les erreurs avec haute latence
@@ -631,19 +676,28 @@ def intercept_ews_calls():
                     
                     # Pause forcée pour les suppressions lentes
                     if "mailbox database is temporarily unavailable" in str(e).lower():
-                        pause_message = f"⚠️ PAUSE DE 30s: Base de données temporairement indisponible - {elapsed_ms:.2f}ms"
+                        pause_duration = 30  # 30 secondes de pause
+                        time_before = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                        pause_message = f"⛔ DÉBUT PAUSE {time_before} - Base de données indisponible ({elapsed_ms:.0f}ms) - {pause_duration}s d'attente"
                         print(f"{Fore.RED}{pause_message}{Style.RESET_ALL}")
-                        # Ajouter le message de pause aux logs et à l'interface
                         ews_logger.add_log(pause_message, "ERROR")
                         ews_unified_interface.add_log(pause_message, "ERROR")
-                        time.sleep(30)
+                        
+                        time.sleep(pause_duration)
+                        
+                        time_after = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                        after_message = f"✅ FIN PAUSE {time_after} - Reprise après {pause_duration}s d'attente"
+                        print(f"{Fore.GREEN}{after_message}{Style.RESET_ALL}")
+                        ews_logger.add_log(after_message, "INFO")
+                        ews_unified_interface.add_log(after_message, "INFO")
                     else:
-                        pause_message = f"⚠️ PAUSE DE 5s: Opération de suppression lente - {elapsed_ms:.2f}ms"
+                        # Autres erreurs lentes
+                        pause_duration = 5  # 5 secondes de pause
+                        pause_message = f"⚠️ PAUSE DE {pause_duration}s: Autre erreur de suppression lente - {elapsed_ms:.2f}ms"
                         print(f"{Fore.YELLOW}{pause_message}{Style.RESET_ALL}")
-                        # Ajouter le message de pause aux logs et à l'interface
                         ews_logger.add_log(pause_message, "WARN")
                         ews_unified_interface.add_log(pause_message, "WARN")
-                        time.sleep(5)
+                        time.sleep(pause_duration)
                 
                 ews_stats.add_call_time(elapsed_ms, error_type, f"Error in {call_info}: {str(e)}")
                 ews_logger.add_log(error_message, "ERROR")
@@ -787,13 +841,14 @@ def empty_folder(folder, batch_size=100):
                         error_message = str(delete_error)
                         
                         # Vérifier si c'est l'erreur spécifique de base de données temporairement indisponible
-                        if "mailbox database is temporarily unavailable" in error_message.lower():
+                        # mais seulement si elle n'a pas déjà été traitée par le wrapped_delete
+                        if "mailbox database is temporarily unavailable" in error_message.lower() and "⚠️ PAUSE" not in error_message:
                             consecutive_failures += 1
                             
                             # Si nous avons plusieurs échecs consécutifs, prendre une pause plus longue
                             if consecutive_failures >= 3:
                                 pause_duration = 60  # 1 minute de pause
-                                pause_message = f"Erreur de base de données de la boîte aux lettres. Pause de {pause_duration} secondes avant de reprendre."
+                                pause_message = f"⚠️ PAUSE DE {pause_duration}s: Base de données temporairement indisponible (échecs multiples)"
                                 print(f"{Fore.RED}{pause_message}{Style.RESET_ALL}")
                                 ews_logger.add_log(pause_message, "ERROR")
                                 
@@ -1074,7 +1129,11 @@ def interface_process(command_queue, data_queue, log_queue, stop_event):
                     print(f"{'Heure':<10} {'Type':<15} {'Temps (ms)':<12} {'Détails':<200}")
                     print("-" * 240)
                     
-                    for call in reversed(ews_calls[-10:]):  # Prendre les 10 derniers, en ordre inverse
+                    # Assurer une rotation complète des appels, y compris les erreurs
+                    # Utiliser une liste temporaire triée par timestamp
+                    recent_calls = sorted(ews_calls[-max_calls_to_display:], key=lambda x: x.get('timestamp', ''))
+                    
+                    for call in reversed(recent_calls):  # Afficher les plus récents en premier
                         # Coloriser selon le temps
                         time_color = "\033[92m"  # Vert
                         if call["time"] > 1000:
