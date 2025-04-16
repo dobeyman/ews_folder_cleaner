@@ -1,0 +1,4 @@
+# Requirements for Exchange Web Services Cleaner
+exchangelib>=4.6.0
+colorama>=0.4.4
+rich>=10.0.0 
