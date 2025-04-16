@@ -129,9 +129,10 @@ class EWSStats:
             
             # Ajouter un log spécial pour les appels lents (plus de 1000ms)
             if ms > 1000:
-                slow_log_message = f"SLOW EWS CALL: {command_details} - {call_type} - {ms:.2f}ms"
+                # Ajouter un emoji pour rendre plus visible
+                slow_log_message = f"🕒 SLOW EWS CALL: {call_type} - {ms:.2f}ms - {command_details}"
                 ews_logger.add_log(slow_log_message, "WARN")
-                # Également ajouter à l'interface unifiée
+                # Également ajouter à l'interface unifiée avec priorité
                 if ews_unified_interface and ews_unified_interface.running:
                     ews_unified_interface.add_log(slow_log_message, "WARN")
             
@@ -619,10 +620,18 @@ def intercept_ews_calls():
                     
                     # Pause forcée pour les suppressions lentes
                     if "mailbox database is temporarily unavailable" in str(e).lower():
-                        print(f"{Fore.RED}Base de données boîte aux lettres temporairement indisponible. Pause de 30s.{Style.RESET_ALL}")
+                        pause_message = f"⚠️ PAUSE DE 30s: Base de données temporairement indisponible - {elapsed_ms:.2f}ms"
+                        print(f"{Fore.RED}{pause_message}{Style.RESET_ALL}")
+                        # Ajouter le message de pause aux logs et à l'interface
+                        ews_logger.add_log(pause_message, "ERROR")
+                        ews_unified_interface.add_log(pause_message, "ERROR")
                         time.sleep(30)
                     else:
-                        print(f"{Fore.YELLOW}Suppression lente détectée. Pause de 5s.{Style.RESET_ALL}")
+                        pause_message = f"⚠️ PAUSE DE 5s: Opération de suppression lente - {elapsed_ms:.2f}ms"
+                        print(f"{Fore.YELLOW}{pause_message}{Style.RESET_ALL}")
+                        # Ajouter le message de pause aux logs et à l'interface
+                        ews_logger.add_log(pause_message, "WARN")
+                        ews_unified_interface.add_log(pause_message, "WARN")
                         time.sleep(5)
                 
                 ews_stats.add_call_time(elapsed_ms, error_type, f"Error in {call_info}: {str(e)}")
