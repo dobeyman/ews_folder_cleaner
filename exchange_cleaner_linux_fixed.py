@@ -599,7 +599,7 @@ def intercept_ews_calls():
             call_type = "unknown"
             call_info = "EWS request"
             
-            try:
+            try
                 if len(args) > 0 and hasattr(args[0], 'tag'):
                     call_type = args[0].tag.localname
                     call_info = f"Operation: {call_type}"
@@ -1129,9 +1129,29 @@ def interface_process(command_queue, data_queue, log_queue, stop_event):
                     print(f"{'Heure':<10} {'Type':<15} {'Temps (ms)':<12} {'Détails':<200}")
                     print("-" * 240)
                     
-                    # Assurer une rotation complète des appels, y compris les erreurs
-                    # Utiliser une liste temporaire triée par timestamp
-                    recent_calls = sorted(ews_calls[-max_calls_to_display:], key=lambda x: x.get('timestamp', ''))
+                    # Limiter le nombre d'erreurs de chaque type pour éviter qu'elles restent affichées en permanence
+                    error_counts = {}  # Pour compter les erreurs de chaque type
+                    filtered_calls = []
+                    
+                    # Parcourir les appels récents et limiter les erreurs
+                    for call in ews_calls[-30:]:  # Considérer les 30 derniers appels
+                        call_type = call["type"]
+                        
+                        # Si c'est une erreur, ne garder que la plus récente de chaque type
+                        if call_type.startswith("error_"):
+                            if call_type not in error_counts:
+                                error_counts[call_type] = 0
+                            
+                            # Ne garder qu'une seule erreur de chaque type
+                            if error_counts[call_type] < 1:
+                                filtered_calls.append(call)
+                                error_counts[call_type] += 1
+                        else:
+                            # Pour les appels normaux, les ajouter tous
+                            filtered_calls.append(call)
+                    
+                    # Ne garder que les 10 appels les plus récents après filtrage
+                    recent_calls = sorted(filtered_calls[-10:], key=lambda x: x.get('timestamp', ''))
                     
                     for call in reversed(recent_calls):  # Afficher les plus récents en premier
                         # Coloriser selon le temps
