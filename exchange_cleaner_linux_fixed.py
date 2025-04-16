@@ -120,6 +120,11 @@ class EWSStats:
             # Ajouter un log pour cet appel
             log_message = f"EWS call: {command_details} - {call_type} - {ms:.2f}ms"
             ews_logger.add_log(log_message, "INFO")
+            
+            # Ajouter un log spécial pour les appels lents (plus de 1000ms)
+            if ms > 1000:
+                slow_log_message = f"SLOW EWS CALL: {command_details} - {call_type} - {ms:.2f}ms"
+                ews_logger.add_log(slow_log_message, "WARN")
     
     def start_call(self):
         with self.lock:
