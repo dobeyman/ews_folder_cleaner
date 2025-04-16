@@ -599,7 +599,7 @@ def intercept_ews_calls():
             call_type = "unknown"
             call_info = "EWS request"
             
-            try
+            try:
                 if len(args) > 0 and hasattr(args[0], 'tag'):
                     call_type = args[0].tag.localname
                     call_info = f"Operation: {call_type}"
