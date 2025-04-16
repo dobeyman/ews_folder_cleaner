@@ -603,6 +603,17 @@ def intercept_ews_calls():
                 result = original_delete(self, *args, **kwargs)
                 elapsed_ms = (time.time() - start_time) * 1000
                 ews_stats.add_call_time(elapsed_ms, call_type, call_info)
+                
+                # Ajouter une pause pour les appels réussis mais lents
+                if elapsed_ms > 1000:
+                    pause_duration = 3  # pause plus courte pour les appels réussis
+                    pause_message = f"⚠️ PAUSE DE {pause_duration}s: Opération de suppression lente mais réussie - {elapsed_ms:.2f}ms"
+                    print(f"{Fore.YELLOW}{pause_message}{Style.RESET_ALL}")
+                    ews_logger.add_log(pause_message, "WARN")
+                    if ews_unified_interface and ews_unified_interface.running:
+                        ews_unified_interface.add_log(pause_message, "WARN")
+                    time.sleep(pause_duration)
+                
                 ews_stats.end_call()
                 return result
             except Exception as e:
