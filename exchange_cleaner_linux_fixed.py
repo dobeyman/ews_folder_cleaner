@@ -648,16 +648,16 @@ def list_folders(account):
                 folders.append(folder)
                 
                 # Enregistrer dans les logs
-                ews_logger.add_log(f"Found folder: {folder.name} ({folder.total_count} items)")
+                ews_logger.info(f"Found folder: {folder.name} ({folder.total_count} items)")
                 
                 # Nous n'avons pas besoin d'ajouter manuellement des mesures de temps ici
                 # car l'intercepteur les mesure déjà
             except Exception as e:
                 print(f"{Fore.RED}Error getting folder info: {e}{Style.RESET_ALL}")
-                ews_logger.add_log(f"Error getting folder info: {e}", "ERROR")
+                ews_logger.error(f"Error getting folder info: {e}")
     except Exception as e:
         print(f"{Fore.RED}Error listing folders: {e}{Style.RESET_ALL}")
-        ews_logger.add_log(f"Error listing folders: {e}", "ERROR")
+        ews_logger.error(f"Error listing folders: {e}")
     
     return folders
 
@@ -708,7 +708,7 @@ def empty_folder(folder, batch_size=100):
                     break
             except Exception as e:
                 print(f"{Fore.RED}Error refreshing folder info: {e}{Style.RESET_ALL}")
-                ews_logger.add_log(f"Error refreshing folder info: {e}", "ERROR")
+                ews_logger.error(f"Error refreshing folder info: {e}")
                 actual_remaining = folder.total_count
                 if actual_remaining == 0:
                     ews_unified_interface.reset_progress()
@@ -727,11 +727,11 @@ def empty_folder(folder, batch_size=100):
                     wait_time = 30  # 30 secondes d'attente pour cette erreur spécifique
                     error_log = f"Base de données boîte aux lettres temporairement indisponible. Attente de {wait_time} secondes."
                     print(f"{Fore.YELLOW}{error_log}{Style.RESET_ALL}")
-                    ews_logger.add_log(error_log, "WARN")
+                    ews_logger.warning(error_log)
                     time.sleep(wait_time)
                 else:
                     # Pour les autres erreurs, attendre seulement 2 secondes
-                    ews_logger.add_log(f"Error getting items: {error_message}", "ERROR")
+                    ews_logger.error(f"Error getting items: {error_message}")
                     time.sleep(2)  # Pause en cas d'erreur
                 
                 continue
@@ -743,7 +743,7 @@ def empty_folder(folder, batch_size=100):
             
             # Supprimer le lot
             print(f"{Fore.CYAN}Deleting batch of {len(items)} items...{Style.RESET_ALL}")
-            ews_logger.add_log(f"Deleting batch of {len(items)} items from {folder.name}")
+            ews_logger.info(f"Deleting batch of {len(items)} items from {folder.name}")
             
             # Ajouter un suivi des échecs consécutifs
             consecutive_failures = 0
@@ -770,7 +770,7 @@ def empty_folder(folder, batch_size=100):
                                 pause_duration = 60  # 1 minute de pause
                                 pause_message = f"⚠️ PAUSE DE {pause_duration}s: Base de données temporairement indisponible (échecs multiples)"
                                 print(f"{Fore.RED}{pause_message}{Style.RESET_ALL}")
-                                ews_logger.add_log(pause_message, "ERROR")
+                                ews_logger.error(pause_message)
                                 
                                 # Ajouter un log dans l'interface unifiée
                                 ews_unified_interface.add_log(pause_message, "ERROR")
@@ -782,12 +782,12 @@ def empty_folder(folder, batch_size=100):
                                 # Pause plus courte pour les premières erreurs
                                 short_pause = 5  # 5 secondes
                                 print(f"{Fore.YELLOW}Base de données temporairement indisponible. Pause de {short_pause} secondes.{Style.RESET_ALL}")
-                                ews_logger.add_log(f"Base de données temporairement indisponible. Pause de {short_pause} secondes.", "WARN")
+                                ews_logger.warning(f"Base de données temporairement indisponible. Pause de {short_pause} secondes.")
                                 time.sleep(short_pause)
                         else:
                             error_message = f"Erreur de suppression EWS: {str(delete_error)}"
                             print(f"{Fore.RED}{error_message}{Style.RESET_ALL}")
-                            ews_logger.add_log(error_message, "ERROR")
+                            ews_logger.error(error_message)
                             # Continuer avec les autres éléments
                 
                 processed += len(items)
@@ -822,31 +822,31 @@ def empty_folder(folder, batch_size=100):
             except ErrorServerBusy as e:
                 back_off = e.back_off
                 print(f"{Fore.YELLOW}Server busy. Waiting for {back_off} seconds...{Style.RESET_ALL}")
-                ews_logger.add_log(f"Server busy. Waiting for {back_off} seconds", "WARN")
+                ews_logger.warning(f"Server busy. Waiting for {back_off} seconds")
                 time.sleep(back_off)
             
             except ErrorMailboxStoreUnavailable:
                 print(f"{Fore.YELLOW}Mailbox store unavailable. Waiting...{Style.RESET_ALL}")
-                ews_logger.add_log("Mailbox store unavailable. Waiting...", "WARN")
+                ews_logger.warning("Mailbox store unavailable. Waiting...")
                 time.sleep(5)
             
             except Exception as e:
                 print(f"{Fore.RED}Error deleting items: {e}{Style.RESET_ALL}")
-                ews_logger.add_log(f"Error deleting items: {e}", "ERROR")
+                ews_logger.error(f"Error deleting items: {e}")
                 time.sleep(2)  # Pause en cas d'erreur
         
         # Afficher le résumé
         elapsed = time.time() - start_time
         print(f"\n{Fore.GREEN}Folder processing complete!{Style.RESET_ALL}")
         print(f"{Fore.CYAN}Processed {processed} items in {elapsed:.2f} seconds ({processed/elapsed:.2f} items/sec){Style.RESET_ALL}")
-        ews_logger.add_log(f"Completed processing folder {folder.name}. Deleted {processed} items in {elapsed:.2f} seconds.")
+        ews_logger.info(f"Completed processing folder {folder.name}. Deleted {processed} items in {elapsed:.2f} seconds.")
         
         # Réinitialiser les données de progression après avoir terminé
         ews_unified_interface.reset_progress()
     
     except Exception as e:
         print(f"{Fore.RED}Error processing folder: {e}{Style.RESET_ALL}")
-        ews_logger.add_log(f"Error processing folder: {e}", "ERROR")
+        ews_logger.error(f"Error processing folder: {e}")
         # Réinitialiser les données de progression en cas d'erreur
         ews_unified_interface.reset_progress()
 
