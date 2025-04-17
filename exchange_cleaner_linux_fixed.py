@@ -850,10 +850,6 @@ def empty_folder(folder, batch_size=100):
         # Réinitialiser les données de progression en cas d'erreur
         ews_unified_interface.reset_progress()
 
-# Créer des instances globales pour les logs et les statistiques
-ews_logger = EWSLogger()
-ews_stats_window = EWSStatsWindow()
-
 # Créer une instance globale de l'interface unifiée
 ews_unified_interface = EWSUnifiedInterface()
 
