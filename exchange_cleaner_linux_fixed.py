@@ -1158,7 +1158,13 @@ def main():
         i += 1
     
     # Créer et configurer le logger EWS
-    ews_logger.log_to_console = console_log
+    # ews_logger.log_to_console = console_log
+    
+    # Add a StreamHandler to logger if console logging is needed
+    if console_log:
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
     
     # Afficher la fenêtre de logs EWS si demandé
     if show_log_window:
