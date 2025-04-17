@@ -536,7 +536,6 @@ def intercept_ews_calls():
                 elapsed_ms = (time.time() - start_time) * 1000
                 error_message = f"Erreur EWS ({call_type}): {str(e)}"
                 ews_stats.add_call_time(elapsed_ms, f"error_{call_type}", f"Error in {call_info}: {str(e)}")
-                ews_logger.add_log(error_message, "ERROR")
                 ews_stats.end_call()
                 raise
         
@@ -1168,7 +1167,7 @@ def main():
     
     # Afficher la fenêtre de logs EWS si demandé
     if show_log_window:
-        ews_logger.show_log_window()
+        print(f"{Fore.GREEN}Logs are being written to the log file.{Style.RESET_ALL}")
     
     # Afficher la fenêtre de statistiques si demandé
     if show_stats_window:
@@ -1442,7 +1441,6 @@ def main():
         if use_unified_interface:
             ews_unified_interface.stop()
         else:
-            ews_logger.stop()
             ews_stats_window.stop()
 
         # Attendre un moment pour permettre de voir les statistiques
