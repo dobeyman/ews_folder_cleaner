@@ -24,6 +24,8 @@ import select
 import platform
 import functools
 import inspect
+import logging
+from logging.handlers import TimedRotatingFileHandler
 
 # Ajouter une entrée personnalisée pour le fuseau horaire "Customized Time Zone"
 # Utiliser Europe/Paris comme valeur raisonnable (à ajuster selon vos besoins)
@@ -189,105 +191,24 @@ class EWSStats:
 # Créer une instance globale pour les statistiques
 ews_stats = EWSStats()
 
-# Classe pour les logs EWS
-class EWSLogger:
-    def __init__(self, log_file=None):
-        self.log_entries = []
-        self.log_queue = queue.Queue()
-        self.log_thread = None
-        self.running = False
-        self.log_to_console = False
-        
-        # Set the log file path
-        if log_file:
-            self.log_file = log_file
-        else:
-            # Default log file in /tmp on Linux or temp on Windows
-            if platform.system() == "Windows":
-                self.log_file = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "ews_logs.txt")
-            else:
-                self.log_file = "/tmp/ews_logs.txt"
-        
-        # Ensure the log file is accessible
-        self.setup_log_file()
-    
-    def setup_log_file(self):
-        """Ensure the log file is created and accessible"""
-        try:
-            # Get the directory of the log file
-            log_dir = os.path.dirname(self.log_file)
-            
-            # Check if the directory exists and create it if needed
-            if not os.path.exists(log_dir) and log_dir:
-                try:
-                    os.makedirs(log_dir, exist_ok=True)
-                    print(f"{Fore.GREEN}Created log directory: {log_dir}{Style.RESET_ALL}")
-                except Exception as e:
-                    print(f"{Fore.RED}Failed to create log directory: {log_dir} - {e}{Style.RESET_ALL}")
-                    # Fall back to using home directory
-                    home_dir = os.path.expanduser("~")
-                    self.log_file = os.path.join(home_dir, "ews_logs.txt")
-                    print(f"{Fore.YELLOW}Using alternate log location: {self.log_file}{Style.RESET_ALL}")
-            
-            # Create the log file if it doesn't exist
-            with open(self.log_file, 'a') as f:
-                if os.path.getsize(self.log_file) == 0:
-                    # File was just created, write header
-                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    f.write(f"=== EWS CLEANER LOG STARTED AT {timestamp} ===\n")
-            
-            # Verify the file exists and is writeable
-            if not os.path.exists(self.log_file):
-                raise IOError(f"Log file could not be created: {self.log_file}")
-            
-            print(f"{Fore.GREEN}Log file initialized: {self.log_file}{Style.RESET_ALL}")
-            print(f"{Fore.CYAN}To view logs in real-time, use: tail -f {self.log_file}{Style.RESET_ALL}")
-        except Exception as e:
-            print(f"{Fore.RED}Failed to initialize log file: {e}{Style.RESET_ALL}")
-            # Continue without logging to file
-            self.log_file = None
-    
-    def start_logging(self):
-        """Start the logging thread"""
-        pass
-    
-    def add_log(self, message, level="INFO"):
-        """Ajoute un message au log"""
-        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        log_entry = {
-            "timestamp": timestamp,
-            "message": message,
-            "level": level
-        }
-        # Log to console if enabled
-        if self.log_to_console:
-            color = Fore.GREEN
-            if level == "ERROR":
-                color = Fore.RED
-            elif level == "WARN":
-                color = Fore.YELLOW
-            print(f"{color}[{timestamp}] {message}{Style.RESET_ALL}")
-        
-        # Store log in memory
-        self.log_entries.append(log_entry)
-        if len(self.log_entries) > 1000:  # limit to 1000 entries
-            self.log_entries = self.log_entries[-1000:]
-            
-        # Log to file
-        if self.log_file:
-            try:
-                with open(self.log_file, 'a') as f:
-                    f.write(f"[{timestamp}] [{level}] {message}\n")
-            except Exception as e:
-                print(f"{Fore.RED}Failed to write to log file: {e}{Style.RESET_ALL}")
-    
-    def show_log_window(self):
-        """Display log window (dummy implementation for Linux)"""
-        print(f"{Fore.GREEN}Log window: using file {self.log_file}{Style.RESET_ALL}")
-    
-    def stop(self):
-        """Stop logging"""
-        self.running = False
+# Créer un logger
+logger = logging.getLogger('EWSLogger')
+logger.setLevel(logging.INFO)
+
+# Créer un gestionnaire de rotation de logs toutes les 2 heures
+handler = TimedRotatingFileHandler(
+    filename='ews_logs.txt',
+    when='H',  # 'H' pour heure
+    interval=2,  # Toutes les 2 heures
+    backupCount=12  # Garder les 12 derniers fichiers (24 heures de logs)
+)
+
+# Format des logs
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+
+# Ajouter le gestionnaire au logger
+logger.addHandler(handler)
 
 # Classe pour afficher les statistiques EWS dans une fenêtre séparée
 class EWSStatsWindow:
