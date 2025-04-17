@@ -133,14 +133,14 @@ class EWSStats:
             if ms > 1000:
                 # Ajouter un emoji pour rendre plus visible
                 slow_log_message = f"🕒 SLOW EWS CALL: {call_type} - {ms:.2f}ms - {command_details}"
-                ews_logger.add_log(slow_log_message, "WARN")
+                logger.add_log(slow_log_message, "WARN")
                 # Également ajouter à l'interface unifiée avec priorité
                 if ews_unified_interface and ews_unified_interface.running:
                     ews_unified_interface.add_log(slow_log_message, "WARN")
             
             # Log standard pour tous les appels
             log_message = f"EWS call: {command_details} - {call_type} - {ms:.2f}ms"
-            ews_logger.add_log(log_message, log_level)
+            logger.add_log(log_message, log_level)
     
     def start_call(self):
         with self.lock:
@@ -453,7 +453,7 @@ def intercept_ews_calls():
                     # Message de pause avec horodatage
                     pause_message = f"⚠️ DÉBUT PAUSE DE {pause_duration}s ({current_time}): Opération lente mais réussie - {elapsed_ms:.2f}ms"
                     print(f"{Fore.YELLOW}{pause_message}{Style.RESET_ALL}")
-                    ews_logger.add_log(pause_message, "WARN")
+                    logger.add_log(pause_message, "WARN")
                     if ews_unified_interface and ews_unified_interface.running:
                         ews_unified_interface.add_log(pause_message, "WARN")
                     
@@ -466,7 +466,7 @@ def intercept_ews_calls():
                     current_time = datetime.now().strftime("%H:%M:%S")
                     end_pause_message = f"✅ FIN PAUSE ({current_time}): Durée réelle = {actual_pause:.1f}s"
                     print(f"{Fore.GREEN}{end_pause_message}{Style.RESET_ALL}")
-                    ews_logger.add_log(end_pause_message, "INFO")
+                    logger.add_log(end_pause_message, "INFO")
                     if ews_unified_interface and ews_unified_interface.running:
                         ews_unified_interface.add_log(end_pause_message, "INFO")
                 
@@ -479,7 +479,7 @@ def intercept_ews_calls():
                     pause_message = f"⚠️⚠️ DÉBUT PAUSE DE {pause_duration}s ({current_time}): Base de données indisponible - {elapsed_ms:.2f}ms"
                     print(f"{Fore.RED}{pause_message}{Style.RESET_ALL}")
                     # Ajouter le message de pause aux logs et à l'interface avec haute priorité
-                    ews_logger.add_log(pause_message, "ERROR")
+                    logger.add_log(pause_message, "ERROR")
                     ews_unified_interface.add_log(pause_message, "ERROR")
                     
                     # Exécuter la pause avec vérification
@@ -491,11 +491,11 @@ def intercept_ews_calls():
                     current_time = datetime.now().strftime("%H:%M:%S")
                     end_pause_message = f"✅ FIN PAUSE ({current_time}): Durée réelle = {actual_pause:.1f}s"
                     print(f"{Fore.GREEN}{end_pause_message}{Style.RESET_ALL}")
-                    ews_logger.add_log(end_pause_message, "INFO")
+                    logger.add_log(end_pause_message, "INFO")
                     ews_unified_interface.add_log(end_pause_message, "INFO")
                 
                 ews_stats.add_call_time(elapsed_ms, f"error_{call_type}", f"Error in {call_info}: {str(e)}")
-                ews_logger.add_log(error_message, "ERROR")
+                logger.add_log(error_message, "ERROR")
                 ews_stats.end_call()
                 raise
         
@@ -571,7 +571,7 @@ def intercept_ews_calls():
                     time_before = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                     pause_message = f"⏱️ DÉBUT PAUSE {time_before} - Suppression lente mais réussie ({elapsed_ms:.0f}ms) - {pause_duration}s d'attente"
                     print(f"{Fore.YELLOW}{pause_message}{Style.RESET_ALL}")
-                    ews_logger.add_log(pause_message, "WARN")
+                    logger.add_log(pause_message, "WARN")
                     ews_unified_interface.add_log(pause_message, "WARN")
                     
                     time.sleep(pause_duration)
@@ -579,7 +579,7 @@ def intercept_ews_calls():
                     time_after = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                     after_message = f"✅ FIN PAUSE {time_after} - Reprise après {pause_duration}s d'attente"
                     print(f"{Fore.GREEN}{after_message}{Style.RESET_ALL}")
-                    ews_logger.add_log(after_message, "INFO")
+                    logger.add_log(after_message, "INFO")
                     ews_unified_interface.add_log(after_message, "INFO")
                 
                 return response
@@ -591,7 +591,7 @@ def intercept_ews_calls():
                 # Log amélioré pour les erreurs avec haute latence
                 if elapsed_ms > 1000:
                     error_type = "error_delete_slow"
-                    ews_logger.add_log(f"ERREUR LENTE DELETE: {error_message} - {elapsed_ms:.2f}ms", "ERROR")
+                    logger.add_log(f"ERREUR LENTE DELETE: {error_message} - {elapsed_ms:.2f}ms", "ERROR")
                     ews_unified_interface.add_log(f"Erreur de suppression lente détectée: {elapsed_ms:.2f}ms", "ERROR")
                     
                     # Pause forcée pour les suppressions lentes
@@ -600,7 +600,7 @@ def intercept_ews_calls():
                         time_before = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                         pause_message = f"⛔ DÉBUT PAUSE {time_before} - Base de données indisponible ({elapsed_ms:.0f}ms) - {pause_duration}s d'attente"
                         print(f"{Fore.RED}{pause_message}{Style.RESET_ALL}")
-                        ews_logger.add_log(pause_message, "ERROR")
+                        logger.add_log(pause_message, "ERROR")
                         ews_unified_interface.add_log(pause_message, "ERROR")
                         
                         time.sleep(pause_duration)
@@ -608,19 +608,19 @@ def intercept_ews_calls():
                         time_after = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                         after_message = f"✅ FIN PAUSE {time_after} - Reprise après {pause_duration}s d'attente"
                         print(f"{Fore.GREEN}{after_message}{Style.RESET_ALL}")
-                        ews_logger.add_log(after_message, "INFO")
+                        logger.add_log(after_message, "INFO")
                         ews_unified_interface.add_log(after_message, "INFO")
                     else:
                         # Autres erreurs lentes
                         pause_duration = 5  # 5 secondes de pause
                         pause_message = f"⚠️ PAUSE DE {pause_duration}s: Autre erreur de suppression lente - {elapsed_ms:.2f}ms"
                         print(f"{Fore.YELLOW}{pause_message}{Style.RESET_ALL}")
-                        ews_logger.add_log(pause_message, "WARN")
+                        logger.add_log(pause_message, "WARN")
                         ews_unified_interface.add_log(pause_message, "WARN")
                         time.sleep(pause_duration)
                 
                 ews_stats.add_call_time(elapsed_ms, error_type, f"Error in {call_info}: {str(e)}")
-                ews_logger.add_log(error_message, "ERROR")
+                logger.add_log(error_message, "ERROR")
                 ews_stats.end_call()
                 raise
         
@@ -648,16 +648,16 @@ def list_folders(account):
                 folders.append(folder)
                 
                 # Enregistrer dans les logs
-                ews_logger.info(f"Found folder: {folder.name} ({folder.total_count} items)")
+                logger.info(f"Found folder: {folder.name} ({folder.total_count} items)")
                 
                 # Nous n'avons pas besoin d'ajouter manuellement des mesures de temps ici
                 # car l'intercepteur les mesure déjà
             except Exception as e:
                 print(f"{Fore.RED}Error getting folder info: {e}{Style.RESET_ALL}")
-                ews_logger.error(f"Error getting folder info: {e}")
+                logger.error(f"Error getting folder info: {e}")
     except Exception as e:
         print(f"{Fore.RED}Error listing folders: {e}{Style.RESET_ALL}")
-        ews_logger.error(f"Error listing folders: {e}")
+        logger.error(f"Error listing folders: {e}")
     
     return folders
 
@@ -708,7 +708,7 @@ def empty_folder(folder, batch_size=100):
                     break
             except Exception as e:
                 print(f"{Fore.RED}Error refreshing folder info: {e}{Style.RESET_ALL}")
-                ews_logger.error(f"Error refreshing folder info: {e}")
+                logger.error(f"Error refreshing folder info: {e}")
                 actual_remaining = folder.total_count
                 if actual_remaining == 0:
                     ews_unified_interface.reset_progress()
@@ -727,11 +727,11 @@ def empty_folder(folder, batch_size=100):
                     wait_time = 30  # 30 secondes d'attente pour cette erreur spécifique
                     error_log = f"Base de données boîte aux lettres temporairement indisponible. Attente de {wait_time} secondes."
                     print(f"{Fore.YELLOW}{error_log}{Style.RESET_ALL}")
-                    ews_logger.warning(error_log)
+                    logger.warning(error_log)
                     time.sleep(wait_time)
                 else:
                     # Pour les autres erreurs, attendre seulement 2 secondes
-                    ews_logger.error(f"Error getting items: {error_message}")
+                    logger.error(f"Error getting items: {error_message}")
                     time.sleep(2)  # Pause en cas d'erreur
                 
                 continue
@@ -743,7 +743,7 @@ def empty_folder(folder, batch_size=100):
             
             # Supprimer le lot
             print(f"{Fore.CYAN}Deleting batch of {len(items)} items...{Style.RESET_ALL}")
-            ews_logger.info(f"Deleting batch of {len(items)} items from {folder.name}")
+            logger.info(f"Deleting batch of {len(items)} items from {folder.name}")
             
             # Ajouter un suivi des échecs consécutifs
             consecutive_failures = 0
@@ -770,7 +770,7 @@ def empty_folder(folder, batch_size=100):
                                 pause_duration = 60  # 1 minute de pause
                                 pause_message = f"⚠️ PAUSE DE {pause_duration}s: Base de données temporairement indisponible (échecs multiples)"
                                 print(f"{Fore.RED}{pause_message}{Style.RESET_ALL}")
-                                ews_logger.error(pause_message)
+                                logger.error(pause_message)
                                 
                                 # Ajouter un log dans l'interface unifiée
                                 ews_unified_interface.add_log(pause_message, "ERROR")
@@ -782,12 +782,12 @@ def empty_folder(folder, batch_size=100):
                                 # Pause plus courte pour les premières erreurs
                                 short_pause = 5  # 5 secondes
                                 print(f"{Fore.YELLOW}Base de données temporairement indisponible. Pause de {short_pause} secondes.{Style.RESET_ALL}")
-                                ews_logger.warning(f"Base de données temporairement indisponible. Pause de {short_pause} secondes.")
+                                logger.warning(f"Base de données temporairement indisponible. Pause de {short_pause} secondes.")
                                 time.sleep(short_pause)
                         else:
                             error_message = f"Erreur de suppression EWS: {str(delete_error)}"
                             print(f"{Fore.RED}{error_message}{Style.RESET_ALL}")
-                            ews_logger.error(error_message)
+                            logger.error(error_message)
                             # Continuer avec les autres éléments
                 
                 processed += len(items)
@@ -822,31 +822,31 @@ def empty_folder(folder, batch_size=100):
             except ErrorServerBusy as e:
                 back_off = e.back_off
                 print(f"{Fore.YELLOW}Server busy. Waiting for {back_off} seconds...{Style.RESET_ALL}")
-                ews_logger.warning(f"Server busy. Waiting for {back_off} seconds")
+                logger.warning(f"Server busy. Waiting for {back_off} seconds")
                 time.sleep(back_off)
             
             except ErrorMailboxStoreUnavailable:
                 print(f"{Fore.YELLOW}Mailbox store unavailable. Waiting...{Style.RESET_ALL}")
-                ews_logger.warning("Mailbox store unavailable. Waiting...")
+                logger.warning("Mailbox store unavailable. Waiting...")
                 time.sleep(5)
             
             except Exception as e:
                 print(f"{Fore.RED}Error deleting items: {e}{Style.RESET_ALL}")
-                ews_logger.error(f"Error deleting items: {e}")
+                logger.error(f"Error deleting items: {e}")
                 time.sleep(2)  # Pause en cas d'erreur
         
         # Afficher le résumé
         elapsed = time.time() - start_time
         print(f"\n{Fore.GREEN}Folder processing complete!{Style.RESET_ALL}")
         print(f"{Fore.CYAN}Processed {processed} items in {elapsed:.2f} seconds ({processed/elapsed:.2f} items/sec){Style.RESET_ALL}")
-        ews_logger.info(f"Completed processing folder {folder.name}. Deleted {processed} items in {elapsed:.2f} seconds.")
+        logger.info(f"Completed processing folder {folder.name}. Deleted {processed} items in {elapsed:.2f} seconds.")
         
         # Réinitialiser les données de progression après avoir terminé
         ews_unified_interface.reset_progress()
     
     except Exception as e:
         print(f"{Fore.RED}Error processing folder: {e}{Style.RESET_ALL}")
-        ews_logger.error(f"Error processing folder: {e}")
+        logger.error(f"Error processing folder: {e}")
         # Réinitialiser les données de progression en cas d'erreur
         ews_unified_interface.reset_progress()
 
