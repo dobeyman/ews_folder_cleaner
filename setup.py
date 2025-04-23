@@ -18,7 +18,7 @@ setup(
     description="A powerful utility for cleaning and managing Exchange mailbox folders via EWS",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/ews-folder-cleaner",  # Remplacez par l'URL de votre dépôt
+    url="https://github.com/dobeyman/ews_folder_cleaner",  # Remplacez par l'URL de votre dépôt
     packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
