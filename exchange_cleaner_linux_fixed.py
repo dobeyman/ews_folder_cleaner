@@ -10,8 +10,6 @@ from exchangelib.winzone import MS_TIMEZONE_TO_IANA_MAP, CLDR_TO_MS_TIMEZONE_MAP
 import time
 import sys
 import random
-import tkinter as tk
-from tkinter import ttk
 from datetime import datetime
 import threading
 import statistics
