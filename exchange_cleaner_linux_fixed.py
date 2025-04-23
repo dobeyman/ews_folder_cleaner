@@ -5,7 +5,7 @@ import getpass
 import concurrent.futures
 from exchangelib import Credentials, Account, Configuration, DELEGATE, EWSDateTime, EWSTimeZone
 from exchangelib.errors import ErrorItemNotFound, ErrorServerBusy, ErrorMailboxStoreUnavailable
-# Importer les dictionnaires de conversion de fuseaux horaires
+# Import timezone conversion dictionaries
 from exchangelib.winzone import MS_TIMEZONE_TO_IANA_MAP, CLDR_TO_MS_TIMEZONE_MAP
 import time
 import sys
@@ -25,15 +25,15 @@ import platform
 import functools
 import inspect
 
-# Ajouter une entrée personnalisée pour le fuseau horaire "Customized Time Zone"
-# Utiliser Europe/Paris comme valeur raisonnable (à ajuster selon vos besoins)
+# Add a custom entry for the "Customized Time Zone"
+# Use Europe/Paris as a reasonable value (adjust according to your needs)
 MS_TIMEZONE_TO_IANA_MAP['Customized Time Zone'] = "Europe/Paris"
-print(f"{Fore.CYAN}Fuseau horaire personnalisé ajouté: 'Customized Time Zone' -> 'Europe/Paris'{Style.RESET_ALL}")
+print(f"{Fore.CYAN}Custom timezone added: 'Customized Time Zone' -> 'Europe/Paris'{Style.RESET_ALL}")
 
-# Détection de la plateforme
+# Platform detection
 IS_WINDOWS = False  # Force Linux mode
 
-# Installation de rich si nécessaire
+# Install rich if necessary
 try:
     from rich.console import Console
     from rich.table import Table
@@ -43,11 +43,11 @@ try:
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
-    print("La bibliothèque 'rich' n'est pas installée. Tentative d'installation...")
+    print("The 'rich' library is not installed. Attempting installation...")
     try:
         import subprocess
         subprocess.check_call([sys.executable, "-m", "pip", "install", "rich"])
-        print("Installation réussie! Importation de rich...")
+        print("Installation successful! Importing rich...")
         from rich.console import Console
         from rich.table import Table
         from rich.panel import Panel
@@ -55,12 +55,12 @@ except ImportError:
         from rich.live import Live
         RICH_AVAILABLE = True
     except:
-        print("Échec de l'installation de 'rich'. Les statistiques seront affichées en mode simple.")
+        print("Failed to install 'rich'. Statistics will be displayed in simple mode.")
 
 # Initialize colorama
 init()
 
-# Logo ASCII art - version originale avec caractères Unicode
+# Logo ASCII art - original version with Unicode characters
 ews_logo = f"""{Fore.CYAN}╔══════════════════════════════════════════════════════════════════════════╗
 {Fore.CYAN}║ {Fore.GREEN}███████╗██╗    ██╗███████╗     ██████╗██╗     ███████╗ █████╗ ███╗   ██╗{Fore.CYAN} ║
 {Fore.CYAN}║ {Fore.GREEN}██╔════╝██║    ██║██╔════╝    ██╔════╝██║     ██╔════╝██╔══██╗████╗  ██║{Fore.CYAN} ║
@@ -72,71 +72,71 @@ ews_logo = f"""{Fore.CYAN}╔═════════════════
 {Fore.CYAN}║                      {Fore.YELLOW}[ Exchange Web Services Cleaner ]{Fore.CYAN}                     ║
 {Fore.CYAN}╚══════════════════════════════════════════════════════════════════════════╝{Style.RESET_ALL}"""
 
-# Fonction pour imprimer le logo
+# Function to print the logo
 def print_logo():
-    """Affiche le logo du programme"""
+    """Display the program logo"""
     print(ews_logo)
 
-# Fonction pour obtenir les identifiants
+# Function to get credentials
 def get_credentials():
     """Get username and password interactively"""
     username = input(f"{Fore.GREEN}Enter your email address: {Style.RESET_ALL}")
     password = getpass.getpass(f"{Fore.GREEN}Enter your password: {Style.RESET_ALL}")
     return username, password
 
-# Classe pour suivre les temps d'appel EWS
+# Class to track EWS call times
 class EWSStats:
     def __init__(self):
         self.call_times = []
-        self.call_types = {}  # Dictionnaire pour stocker les temps par type d'appel
+        self.call_types = {}  # Dictionary to store times by call type
         self.lock = threading.Lock()
         self.last_call_time = 0
-        self.max_calls_to_keep = 1000  # Limiter le nombre d'entrées pour éviter une utilisation excessive de mémoire
-        self.last_commands = {}  # Stocker les dernières commandes par type
-        self.active_calls = 0  # Compte des appels actifs
+        self.max_calls_to_keep = 1000  # Limit the number of entries to avoid excessive memory usage
+        self.last_commands = {}  # Store the last commands by type
+        self.active_calls = 0  # Count of active calls
     
     def add_call_time(self, ms, call_type="generic", command_details=""):
         with self.lock:
             self.last_call_time = ms
             self.call_times.append(ms)
             
-            # Limiter la taille des listes
+            # Limit the size of lists
             if len(self.call_times) > self.max_calls_to_keep:
                 self.call_times = self.call_times[-self.max_calls_to_keep:]
             
-            # Ajouter par type
+            # Add by type
             if call_type not in self.call_types:
                 self.call_types[call_type] = []
             
             self.call_types[call_type].append(ms)
             
-            # Stocker les détails de la commande
+            # Store command details
             self.last_commands[call_type] = command_details
             
-            # Limiter la taille des listes par type
+            # Limit the size of lists by type
             if len(self.call_types[call_type]) > self.max_calls_to_keep:
                 self.call_types[call_type] = self.call_types[call_type][-self.max_calls_to_keep:]
             
-            # Ajouter un log pour cet appel
+            # Add a log for this call
             log_level = "INFO"
             
-            # S'il s'agit d'une erreur, toujours la journaliser comme une erreur
+            # If it's an error, always log it as an error
             if call_type.startswith("error_"):
                 log_level = "ERROR"
-                # Forcer l'ajout de log à l'interface unifiée pour les erreurs
+                # Force log addition to the unified interface for errors
                 if ews_unified_interface and ews_unified_interface.running:
                     ews_unified_interface.add_log(f"{command_details} - {ms:.2f}ms", log_level)
             
-            # Ajouter un log spécial pour les appels lents (plus de 1000ms)
+            # Add a special log for slow calls (more than 1000ms)
             if ms > 1000:
-                # Ajouter un emoji pour rendre plus visible
+                # Add an emoji to make it more visible
                 slow_log_message = f"🕒 SLOW EWS CALL: {call_type} - {ms:.2f}ms - {command_details}"
                 ews_logger.add_log(slow_log_message, "WARN")
-                # Également ajouter à l'interface unifiée avec priorité
+                # Also add to the unified interface with priority
                 if ews_unified_interface and ews_unified_interface.running:
                     ews_unified_interface.add_log(slow_log_message, "WARN")
             
-            # Log standard pour tous les appels
+            # Standard log for all calls
             log_message = f"EWS call: {command_details} - {call_type} - {ms:.2f}ms"
             ews_logger.add_log(log_message, log_level)
     
@@ -186,10 +186,10 @@ class EWSStats:
                 "last_command": self.last_commands.get(call_type, "")
             }
 
-# Créer une instance globale pour les statistiques
+# Create a global instance for statistics
 ews_stats = EWSStats()
 
-# Classe pour les logs EWS
+# Class for EWS logs
 class EWSLogger:
     def __init__(self, log_file=None):
         self.log_entries = []
@@ -252,7 +252,7 @@ class EWSLogger:
         pass
     
     def add_log(self, message, level="INFO"):
-        """Ajoute un message au log"""
+        """Add a message to the log"""
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         log_entry = {
             "timestamp": timestamp,
@@ -289,7 +289,7 @@ class EWSLogger:
         """Stop logging"""
         self.running = False
 
-# Classe pour afficher les statistiques EWS dans une fenêtre séparée
+# Class to display EWS statistics in a separate window
 class EWSStatsWindow:
     def __init__(self):
         self.running = False
@@ -311,7 +311,7 @@ class EWSStatsWindow:
         self.running = False
         print(f"{Fore.YELLOW}Statistics window stopped{Style.RESET_ALL}")
 
-# Modifier la classe EWSUnifiedInterface pour contrôler le moment où le monitoring démarre
+# Modify the EWSUnifiedInterface class to control when monitoring starts
 class EWSUnifiedInterface:
     def __init__(self):
         self.log_queue = multiprocessing.Queue()
@@ -321,8 +321,8 @@ class EWSUnifiedInterface:
         self.running = False
         self.update_thread = None
         self.user_exit_requested = False
-        self.monitoring_active = False  # Nouveau flag pour contrôler l'activation du monitoring
-        # Données de progression du traitement
+        self.monitoring_active = False  # New flag to control monitoring activation
+        # Processing progress data
         self.progress_data = {
             "folder_name": "",
             "processed": 0,
@@ -333,7 +333,7 @@ class EWSUnifiedInterface:
         }
     
     def add_log(self, message, level="INFO"):
-        """Ajoute un message au log"""
+        """Add a message to the log"""
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         log_entry = {
             "timestamp": timestamp,
@@ -347,7 +347,7 @@ class EWSUnifiedInterface:
                 pass
     
     def add_folders(self, folders_data):
-        """Ajoute les dossiers disponibles"""
+        """Add available folders"""
         if self.running:
             try:
                 self.data_queue.put({"type": "folders", "data": folders_data})
@@ -355,20 +355,20 @@ class EWSUnifiedInterface:
                 pass
     
     def get_command(self, timeout=0.1):
-        """Récupère une commande de l'interface utilisateur"""
+        """Get a command from the user interface"""
         try:
             return self.command_queue.get(timeout=timeout)
         except queue.Empty:
             return None
     
     def start(self, start_monitoring=False):
-        """Démarre l'interface unifiée"""
+        """Start the unified interface"""
         self.running = True
         self.monitoring_active = start_monitoring
-        print(f"{Fore.GREEN}Interface unifiée démarrée (monitoring: {start_monitoring}){Style.RESET_ALL}")
+        print(f"{Fore.GREEN}Unified interface started (monitoring: {start_monitoring}){Style.RESET_ALL}")
     
     def start_monitoring(self):
-        """Active le monitoring des appels EWS"""
+        """Activate EWS call monitoring"""
         if not self.monitoring_active and self.running:
             self.monitoring_active = True
             stop_event = multiprocessing.Event()
@@ -380,34 +380,34 @@ class EWSUnifiedInterface:
             self.interface_process.daemon = True
             self.interface_process.start()
             
-            # Démarrer le thread de mise à jour des statistiques
+            # Start the statistics update thread
             self.update_thread = threading.Thread(target=self.update_stats)
             self.update_thread.daemon = True
             self.update_thread.start()
             
-            print(f"{Fore.GREEN}Monitoring EWS activé{Style.RESET_ALL}")
+            print(f"{Fore.GREEN}EWS monitoring activated{Style.RESET_ALL}")
             return True
         return False
     
     def update_stats(self):
-        """Met à jour périodiquement les statistiques"""
+        """Periodically update statistics"""
         last_stats = {}
         
         while self.running and self.monitoring_active:
             try:
-                # Récupérer les statistiques actuelles
+                # Get current statistics
                 stats = ews_stats.get_stats()
                 
-                # Ne mettre à jour que si les stats ont changé
+                # Only update if stats have changed
                 if stats != last_stats:
                     last_stats = stats.copy()
                     
-                    # Préparer les données de type d'appel
+                    # Prepare call type data
                     call_types = {}
                     for call_type in ews_stats.call_types.keys():
                         call_types[call_type] = ews_stats.get_type_stats(call_type)
                     
-                    # Envoyer les stats au processus d'interface
+                    # Send stats to the interface process
                     stats_data = {
                         "type": "stats",
                         "data": {
@@ -423,11 +423,11 @@ class EWSUnifiedInterface:
             except Exception as e:
                 print(f"Error updating stats: {e}")
             
-            # Attendre avant la prochaine mise à jour
+            # Wait before the next update
             time.sleep(0.5)
     
     def stop(self):
-        """Arrête proprement l'interface"""
+        """Properly stop the interface"""
         self.running = False
         self.monitoring_active = False
         
@@ -440,10 +440,10 @@ class EWSUnifiedInterface:
             except:
                 pass
         
-        print(f"{Fore.YELLOW}Interface unifiée arrêtée{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Unified interface stopped{Style.RESET_ALL}")
 
     def update_progress(self, folder_name, processed, remaining, speed, est_time):
-        """Met à jour les données de progression"""
+        """Update progress data"""
         self.progress_data = {
             "folder_name": folder_name,
             "processed": processed,
@@ -453,7 +453,7 @@ class EWSUnifiedInterface:
             "active": True
         }
         
-        # Envoyer les données de progression au processus d'interface
+        # Send progress data to the interface process
         if self.running and self.monitoring_active:
             try:
                 self.data_queue.put({
@@ -464,7 +464,7 @@ class EWSUnifiedInterface:
                 pass
     
     def reset_progress(self):
-        """Réinitialise les données de progression"""
+        """Reset progress data"""
         self.progress_data = {
             "folder_name": "",
             "processed": 0,
@@ -474,7 +474,7 @@ class EWSUnifiedInterface:
             "active": False
         }
         
-        # Envoyer les données de progression réinitialisées
+        # Send reset progress data
         if self.running and self.monitoring_active:
             try:
                 self.data_queue.put({
@@ -484,23 +484,23 @@ class EWSUnifiedInterface:
             except:
                 pass
 
-# Fonction pour intercepter et chronométrer les appels EWS
+# Function to intercept and time EWS calls
 def intercept_ews_calls():
-    """Intercepte les appels EWS pour mesurer leur temps d'exécution"""
+    """Intercepts EWS calls to measure their execution time"""
     from exchangelib.protocol import Protocol
     
-    # Essayer d'intercepter la méthode post (qui est généralement celle qui fait les requêtes HTTP)
+    # Try to intercept the post method (which is typically the one that makes HTTP requests)
     if hasattr(Protocol, 'post'):
-        # Sauvegarder la méthode originale
+        # Save the original method
         original_post = Protocol.post
         
         @functools.wraps(original_post)
         def wrapped_post(self, *args, **kwargs):
-            # Mesurer le temps d'exécution
+            # Measure execution time
             ews_stats.start_call()
             start_time = time.time()
             
-            # Essayer de déterminer le type d'appel
+            # Try to determine the call type
             call_type = "unknown"
             call_info = "EWS request"
             
@@ -522,53 +522,53 @@ def intercept_ews_calls():
                 return response
             except Exception as e:
                 elapsed_ms = (time.time() - start_time) * 1000
-                error_message = f"Erreur EWS ({call_type}): {str(e)}"
+                error_message = f"EWS Error ({call_type}): {str(e)}"
                 
-                # Pour les appels lents mais réussis
+                # For slow but successful calls
                 if elapsed_ms > 1000:
-                    pause_duration = 3  # pause plus courte pour les appels réussis
+                    pause_duration = 3  # shorter pause for successful calls
                     current_time = datetime.now().strftime("%H:%M:%S")
                     
-                    # Message de pause avec horodatage
-                    pause_message = f"⚠️ DÉBUT PAUSE DE {pause_duration}s ({current_time}): Opération lente mais réussie - {elapsed_ms:.2f}ms"
+                    # Pause message with timestamp
+                    pause_message = f"⚠️ BEGINNING PAUSE OF {pause_duration}s ({current_time}): Slow but successful operation - {elapsed_ms:.2f}ms"
                     print(f"{Fore.YELLOW}{pause_message}{Style.RESET_ALL}")
                     ews_logger.add_log(pause_message, "WARN")
                     if ews_unified_interface and ews_unified_interface.running:
                         ews_unified_interface.add_log(pause_message, "WARN")
                     
-                    # Exécuter la pause avec vérification
+                    # Execute the pause with verification
                     pause_start = time.time()
                     time.sleep(pause_duration)
                     actual_pause = time.time() - pause_start
                     
-                    # Message après la pause
+                    # Message after the pause
                     current_time = datetime.now().strftime("%H:%M:%S")
-                    end_pause_message = f"✅ FIN PAUSE ({current_time}): Durée réelle = {actual_pause:.1f}s"
+                    end_pause_message = f"✅ END PAUSE ({current_time}): Actual duration = {actual_pause:.1f}s"
                     print(f"{Fore.GREEN}{end_pause_message}{Style.RESET_ALL}")
                     ews_logger.add_log(end_pause_message, "INFO")
                     if ews_unified_interface and ews_unified_interface.running:
                         ews_unified_interface.add_log(end_pause_message, "INFO")
                 
-                # Pour les erreurs de base de données
+                # For database errors
                 if "mailbox database is temporarily unavailable" in str(e).lower():
-                    pause_duration = 30  # 30 secondes de pause
+                    pause_duration = 30  # 30 second pause
                     current_time = datetime.now().strftime("%H:%M:%S")
                     
-                    # Message AVANT la pause, avec horodatage
-                    pause_message = f"⚠️⚠️ DÉBUT PAUSE DE {pause_duration}s ({current_time}): Base de données indisponible - {elapsed_ms:.2f}ms"
+                    # Message BEFORE the pause, with timestamp
+                    pause_message = f"⚠️⚠️ BEGINNING PAUSE OF {pause_duration}s ({current_time}): Database unavailable - {elapsed_ms:.2f}ms"
                     print(f"{Fore.RED}{pause_message}{Style.RESET_ALL}")
-                    # Ajouter le message de pause aux logs et à l'interface avec haute priorité
+                    # Add the pause message to logs and interface with high priority
                     ews_logger.add_log(pause_message, "ERROR")
                     ews_unified_interface.add_log(pause_message, "ERROR")
                     
-                    # Exécuter la pause avec vérification
+                    # Execute the pause with verification
                     pause_start = time.time()
                     time.sleep(pause_duration)
                     actual_pause = time.time() - pause_start
                     
-                    # Message APRÈS la pause, avec durée réelle
+                    # Message AFTER the pause, with actual duration
                     current_time = datetime.now().strftime("%H:%M:%S")
-                    end_pause_message = f"✅ FIN PAUSE ({current_time}): Durée réelle = {actual_pause:.1f}s"
+                    end_pause_message = f"✅ END PAUSE ({current_time}): Actual duration = {actual_pause:.1f}s"
                     print(f"{Fore.GREEN}{end_pause_message}{Style.RESET_ALL}")
                     ews_logger.add_log(end_pause_message, "INFO")
                     ews_unified_interface.add_log(end_pause_message, "INFO")
@@ -578,23 +578,23 @@ def intercept_ews_calls():
                 ews_stats.end_call()
                 raise
         
-        # Remplacer la méthode originale par notre wrapper
+        # Replace the original method with our wrapper
         Protocol.post = wrapped_post
-        print(f"{Fore.GREEN}Monitoring EWS activé: méthode Protocol.post interceptée{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}EWS monitoring enabled: Protocol.post method intercepted{Style.RESET_ALL}")
         return True
     
-    # Si post n'existe pas, essayer avec send qui est aussi couramment utilisé
+    # If post doesn't exist, try with send which is also commonly used
     elif hasattr(Protocol, 'send'):
-        # Sauvegarder la méthode originale
+        # Save the original method
         original_send = Protocol.send
         
         @functools.wraps(original_send)
         def wrapped_send(self, *args, **kwargs):
-            # Mesurer le temps d'exécution
+            # Measure execution time
             ews_stats.start_call()
             start_time = time.time()
             
-            # Essayer de déterminer le type d'appel
+            # Try to determine the call type
             call_type = "unknown"
             call_info = "EWS request"
             
@@ -613,18 +613,18 @@ def intercept_ews_calls():
                 return response
             except Exception as e:
                 elapsed_ms = (time.time() - start_time) * 1000
-                error_message = f"Erreur EWS ({call_type}): {str(e)}"
+                error_message = f"EWS Error ({call_type}): {str(e)}"
                 ews_stats.add_call_time(elapsed_ms, f"error_{call_type}", f"Error in {call_info}: {str(e)}")
                 ews_logger.add_log(error_message, "ERROR")
                 ews_stats.end_call()
                 raise
         
-        # Remplacer la méthode originale par notre wrapper
+        # Replace the original method with our wrapper
         Protocol.send = wrapped_send
-        print(f"{Fore.GREEN}Monitoring EWS activé: méthode Protocol.send interceptée{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}EWS monitoring enabled: Protocol.send method intercepted{Style.RESET_ALL}")
         return True
     
-    # Si aucune méthode standard n'est trouvée, essayer une autre approche - intercepter les appels au niveau de Account
+    # If no standard method is found, try another approach - intercept calls at the Account level
     from exchangelib.items import Item
     
     if hasattr(Item, 'delete'):
@@ -632,7 +632,7 @@ def intercept_ews_calls():
         
         @functools.wraps(original_delete)
         def wrapped_delete(self, *args, **kwargs):
-            # Mesurer le temps d'exécution
+            # Measure execution time
             ews_stats.start_call()
             start_time = time.time()
             call_type = "delete"
@@ -644,11 +644,11 @@ def intercept_ews_calls():
                 ews_stats.add_call_time(elapsed_ms, call_type, call_info)
                 ews_stats.end_call()
                 
-                # Ajouter une pause pour les appels réussis mais lents
+                # Add a pause for successful but slow calls
                 if elapsed_ms > 1000:
-                    pause_duration = 3  # pause plus courte pour les appels réussis
+                    pause_duration = 3  # shorter pause for successful calls
                     time_before = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                    pause_message = f"⏱️ DÉBUT PAUSE {time_before} - Suppression lente mais réussie ({elapsed_ms:.0f}ms) - {pause_duration}s d'attente"
+                    pause_message = f"⏱️ BEGINNING PAUSE {time_before} - Slow but successful deletion ({elapsed_ms:.0f}ms) - waiting {pause_duration}s"
                     print(f"{Fore.YELLOW}{pause_message}{Style.RESET_ALL}")
                     ews_logger.add_log(pause_message, "WARN")
                     ews_unified_interface.add_log(pause_message, "WARN")
@@ -656,7 +656,7 @@ def intercept_ews_calls():
                     time.sleep(pause_duration)
                     
                     time_after = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                    after_message = f"✅ FIN PAUSE {time_after} - Reprise après {pause_duration}s d'attente"
+                    after_message = f"✅ END PAUSE {time_after} - Resuming after {pause_duration}s wait"
                     print(f"{Fore.GREEN}{after_message}{Style.RESET_ALL}")
                     ews_logger.add_log(after_message, "INFO")
                     ews_unified_interface.add_log(after_message, "INFO")
@@ -664,20 +664,20 @@ def intercept_ews_calls():
                 return response
             except Exception as e:
                 elapsed_ms = (time.time() - start_time) * 1000
-                error_message = f"Erreur lors de la suppression d'un élément: {str(e)}"
+                error_message = f"Error while deleting an item: {str(e)}"
                 error_type = "error_delete"
                 
-                # Log amélioré pour les erreurs avec haute latence
+                # Enhanced log for high-latency errors
                 if elapsed_ms > 1000:
                     error_type = "error_delete_slow"
-                    ews_logger.add_log(f"ERREUR LENTE DELETE: {error_message} - {elapsed_ms:.2f}ms", "ERROR")
-                    ews_unified_interface.add_log(f"Erreur de suppression lente détectée: {elapsed_ms:.2f}ms", "ERROR")
+                    ews_logger.add_log(f"SLOW DELETE ERROR: {error_message} - {elapsed_ms:.2f}ms", "ERROR")
+                    ews_unified_interface.add_log(f"Slow deletion error detected: {elapsed_ms:.2f}ms", "ERROR")
                     
-                    # Pause forcée pour les suppressions lentes
+                    # Forced pause for slow deletions
                     if "mailbox database is temporarily unavailable" in str(e).lower():
-                        pause_duration = 30  # 30 secondes de pause
+                        pause_duration = 30  # 30 second pause
                         time_before = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                        pause_message = f"⛔ DÉBUT PAUSE {time_before} - Base de données indisponible ({elapsed_ms:.0f}ms) - {pause_duration}s d'attente"
+                        pause_message = f"⛔ BEGINNING PAUSE {time_before} - Database unavailable ({elapsed_ms:.0f}ms) - waiting {pause_duration}s"
                         print(f"{Fore.RED}{pause_message}{Style.RESET_ALL}")
                         ews_logger.add_log(pause_message, "ERROR")
                         ews_unified_interface.add_log(pause_message, "ERROR")
@@ -685,14 +685,14 @@ def intercept_ews_calls():
                         time.sleep(pause_duration)
                         
                         time_after = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                        after_message = f"✅ FIN PAUSE {time_after} - Reprise après {pause_duration}s d'attente"
+                        after_message = f"✅ END PAUSE {time_after} - Resuming after {pause_duration}s wait"
                         print(f"{Fore.GREEN}{after_message}{Style.RESET_ALL}")
                         ews_logger.add_log(after_message, "INFO")
                         ews_unified_interface.add_log(after_message, "INFO")
                     else:
-                        # Autres erreurs lentes
-                        pause_duration = 5  # 5 secondes de pause
-                        pause_message = f"⚠️ PAUSE DE {pause_duration}s: Autre erreur de suppression lente - {elapsed_ms:.2f}ms"
+                        # Other slow errors
+                        pause_duration = 5  # 5 second pause
+                        pause_message = f"⚠️ PAUSE OF {pause_duration}s: Other slow deletion error - {elapsed_ms:.2f}ms"
                         print(f"{Fore.YELLOW}{pause_message}{Style.RESET_ALL}")
                         ews_logger.add_log(pause_message, "WARN")
                         ews_unified_interface.add_log(pause_message, "WARN")
@@ -703,34 +703,34 @@ def intercept_ews_calls():
                 ews_stats.end_call()
                 raise
         
-        # Remplacer la méthode originale par notre wrapper
+        # Replace the original method with our wrapper
         Item.delete = wrapped_delete
-        print(f"{Fore.GREEN}Monitoring EWS activé: méthode Item.delete interceptée{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}EWS monitoring enabled: Item.delete method intercepted{Style.RESET_ALL}")
         return True
     
-    # Si aucune méthode n'a pu être interceptée
-    print(f"{Fore.RED}Impossible d'activer le monitoring EWS: aucune méthode connue n'a été trouvée dans exchangelib{Style.RESET_ALL}")
+    # If no method could be intercepted
+    print(f"{Fore.RED}Unable to enable EWS monitoring: no known method was found in exchangelib{Style.RESET_ALL}")
     return False
 
-# Fonction pour lister les dossiers
+# Function to list folders
 def list_folders(account):
     """List all folders in the account"""
     print(f"\n{Fore.CYAN}Listing folders...{Style.RESET_ALL}")
     folders = []
     
     try:
-        # Parcourir tous les dossiers récursivement
+        # Traverse all folders recursively
         for i, folder in enumerate(account.root.walk(), 1):
             try:
-                # Ajouter des informations sur le dossier
+                # Add information about the folder
                 print(f"{Fore.WHITE}{i}. {Fore.GREEN}{folder.name} {Fore.CYAN}({folder.total_count} items){Style.RESET_ALL}")
                 folders.append(folder)
                 
-                # Enregistrer dans les logs
+                # Record in logs
                 ews_logger.add_log(f"Found folder: {folder.name} ({folder.total_count} items)")
                 
-                # Nous n'avons pas besoin d'ajouter manuellement des mesures de temps ici
-                # car l'intercepteur les mesure déjà
+                # We don't need to manually add time measurements here
+                # because the interceptor already measures them
             except Exception as e:
                 print(f"{Fore.RED}Error getting folder info: {e}{Style.RESET_ALL}")
                 ews_logger.add_log(f"Error getting folder info: {e}", "ERROR")
@@ -740,7 +740,7 @@ def list_folders(account):
     
     return folders
 
-# Fonction pour vider un dossier
+# Function to empty a folder
 def empty_folder(folder, batch_size=100):
     """Empty a folder by deleting all items in batches"""
     print(f"\n{Fore.YELLOW}Processing folder: {Fore.GREEN}{folder.name}{Style.RESET_ALL}")
@@ -750,27 +750,27 @@ def empty_folder(folder, batch_size=100):
         print(f"{Fore.GREEN}Folder is already empty.{Style.RESET_ALL}")
         return
     
-    # Commencer à mesurer le temps
+    # Start measuring time
     start_time = time.time()
     processed = 0
     
     try:
-        # Récupérer l'ID du dossier pour pouvoir le retrouver après
+        # Get the folder ID to be able to find it again later
         folder_id = folder.id
         folder_name = folder.name
         folder_path = folder.absolute
         account = folder.account
         
-        # Traiter par lots
+        # Process in batches
         while True:
-            # Récupérer le dossier actualisé depuis le serveur
+            # Get updated folder from the server
             try:
-                # ... code existant pour rafraîchir le dossier ...
+                # ... existing code to refresh the folder ...
                 if hasattr(folder, 'refresh'):
                     folder.refresh()
                     actual_remaining = folder.total_count
                 else:
-                    # ... code existant ...
+                    # ... existing code ...
                     if hasattr(account.root, 'get_folder_by_path'):
                         try:
                             folder = account.root.get_folder_by_path(folder_path)
@@ -782,7 +782,7 @@ def empty_folder(folder, batch_size=100):
                 
                 if actual_remaining == 0:
                     print(f"{Fore.GREEN}Folder is now empty.{Style.RESET_ALL}")
-                    # Réinitialiser les données de progression
+                    # Reset progress data
                     ews_unified_interface.reset_progress()
                     break
             except Exception as e:
@@ -793,25 +793,25 @@ def empty_folder(folder, batch_size=100):
                     ews_unified_interface.reset_progress()
                     break
             
-            # Récupérer un lot d'éléments
-            # Nous n'avons pas besoin de mesurer manuellement car l'intercepteur le fait
+            # Get a batch of items
+            # We don't need to measure manually because the interceptor does it
             try:
                 items = list(folder.all().order_by('datetime_received')[:batch_size])
             except Exception as e:
                 error_message = str(e)
                 print(f"{Fore.RED}Error getting items: {error_message}{Style.RESET_ALL}")
                 
-                # Vérifier si c'est l'erreur spécifique de base de données temporairement indisponible
+                # Check if it's the specific error for database temporarily unavailable
                 if "mailbox database is temporarily unavailable" in error_message.lower():
-                    wait_time = 30  # 30 secondes d'attente pour cette erreur spécifique
-                    error_log = f"Base de données boîte aux lettres temporairement indisponible. Attente de {wait_time} secondes."
+                    wait_time = 30  # 30 second wait for this specific error
+                    error_log = f"Mailbox database temporarily unavailable. Waiting {wait_time} seconds."
                     print(f"{Fore.YELLOW}{error_log}{Style.RESET_ALL}")
                     ews_logger.add_log(error_log, "WARN")
                     time.sleep(wait_time)
                 else:
-                    # Pour les autres erreurs, attendre seulement 2 secondes
+                    # For other errors, wait only 2 seconds
                     ews_logger.add_log(f"Error getting items: {error_message}", "ERROR")
-                    time.sleep(2)  # Pause en cas d'erreur
+                    time.sleep(2)  # Pause in case of error
                 
                 continue
             
@@ -820,70 +820,70 @@ def empty_folder(folder, batch_size=100):
                 ews_unified_interface.reset_progress()
                 break
             
-            # Supprimer le lot
+            # Delete the batch
             print(f"{Fore.CYAN}Deleting batch of {len(items)} items...{Style.RESET_ALL}")
             ews_logger.add_log(f"Deleting batch of {len(items)} items from {folder.name}")
             
-            # Ajouter un suivi des échecs consécutifs
+            # Add tracking of consecutive failures
             consecutive_failures = 0
             
             try:
-                # Supprimer les éléments un par un - l'intercepteur mesurera chaque appel
+                # Delete items one by one - the interceptor will measure each call
                 for item in items:
                     try:
-                        # Ajouter un délai entre chaque appel pour réduire la charge
-                        time.sleep(0.05)  # 50ms entre chaque appel
+                        # Add a delay between each call to reduce load
+                        time.sleep(0.05)  # 50ms between each call
                         
-                        item.delete()  # L'intercepteur mesure automatiquement cet appel
-                        consecutive_failures = 0  # Réinitialiser le compteur en cas de succès
+                        item.delete()  # The interceptor automatically measures this call
+                        consecutive_failures = 0  # Reset counter on success
                     except Exception as delete_error:
                         error_message = str(delete_error)
                         
-                        # Vérifier si c'est l'erreur spécifique de base de données temporairement indisponible
-                        # mais seulement si elle n'a pas déjà été traitée par le wrapped_delete
+                        # Check if it's the specific error for database temporarily unavailable
+                        # but only if it hasn't already been handled by wrapped_delete
                         if "mailbox database is temporarily unavailable" in error_message.lower() and "⚠️ PAUSE" not in error_message:
                             consecutive_failures += 1
                             
-                            # Si nous avons plusieurs échecs consécutifs, prendre une pause plus longue
+                            # If we have multiple consecutive failures, take a longer pause
                             if consecutive_failures >= 3:
-                                pause_duration = 60  # 1 minute de pause
-                                pause_message = f"⚠️ PAUSE DE {pause_duration}s: Base de données temporairement indisponible (échecs multiples)"
+                                pause_duration = 60  # 1 minute pause
+                                pause_message = f"⚠️ PAUSE OF {pause_duration}s: Database temporarily unavailable (multiple failures)"
                                 print(f"{Fore.RED}{pause_message}{Style.RESET_ALL}")
                                 ews_logger.add_log(pause_message, "ERROR")
                                 
-                                # Ajouter un log dans l'interface unifiée
+                                # Add a log in the unified interface
                                 ews_unified_interface.add_log(pause_message, "ERROR")
                                 
                                 # Pause
                                 time.sleep(pause_duration)
-                                consecutive_failures = 0  # Réinitialiser après la pause
+                                consecutive_failures = 0  # Reset after the pause
                             else:
-                                # Pause plus courte pour les premières erreurs
-                                short_pause = 5  # 5 secondes
-                                print(f"{Fore.YELLOW}Base de données temporairement indisponible. Pause de {short_pause} secondes.{Style.RESET_ALL}")
-                                ews_logger.add_log(f"Base de données temporairement indisponible. Pause de {short_pause} secondes.", "WARN")
+                                # Shorter pause for first errors
+                                short_pause = 5  # 5 seconds
+                                print(f"{Fore.YELLOW}Database temporarily unavailable. Pause of {short_pause} seconds.{Style.RESET_ALL}")
+                                ews_logger.add_log(f"Database temporarily unavailable. Pause of {short_pause} seconds.", "WARN")
                                 time.sleep(short_pause)
                         else:
-                            error_message = f"Erreur de suppression EWS: {str(delete_error)}"
+                            error_message = f"EWS deletion error: {str(delete_error)}"
                             print(f"{Fore.RED}{error_message}{Style.RESET_ALL}")
                             ews_logger.add_log(error_message, "ERROR")
-                            # Continuer avec les autres éléments
+                            # Continue with other items
                 
                 processed += len(items)
                 
-                # Mettre à jour le compteur sans essayer de rafraîchir le dossier
+                # Update the counter without trying to refresh the folder
                 try:
                     actual_remaining = folder.total_count 
                 except Exception as e:
                     print(f"{Fore.YELLOW}Could not get folder count: {e}{Style.RESET_ALL}")
                     actual_remaining = max(0, folder.total_count - len(items))
                 
-                # Afficher la progression
+                # Display progress
                 elapsed = time.time() - start_time
                 items_per_sec = processed / elapsed if elapsed > 0 else 0
                 est_time = actual_remaining / items_per_sec if items_per_sec > 0 else 0
                 
-                # Mettre à jour les données de progression dans l'interface
+                # Update progress data in the interface
                 ews_unified_interface.update_progress(
                     folder_name=folder.name,
                     processed=processed,
@@ -895,7 +895,7 @@ def empty_folder(folder, batch_size=100):
                 formatted_time = format_time_remaining(est_time)
                 print(f"{Fore.GREEN}Processed: {processed} items, {Fore.YELLOW}Remaining: {actual_remaining}, {Fore.CYAN}Speed: {items_per_sec:.2f} items/sec, {Fore.MAGENTA}Est. time left: {formatted_time}{Style.RESET_ALL}")
                 
-                # Ajout d'un délai pour éviter trop de charge sur le serveur
+                # Add a delay to avoid too much load on the server
                 time.sleep(0.1)
             
             except ErrorServerBusy as e:
@@ -912,33 +912,33 @@ def empty_folder(folder, batch_size=100):
             except Exception as e:
                 print(f"{Fore.RED}Error deleting items: {e}{Style.RESET_ALL}")
                 ews_logger.add_log(f"Error deleting items: {e}", "ERROR")
-                time.sleep(2)  # Pause en cas d'erreur
+                time.sleep(2)  # Pause in case of error
         
-        # Afficher le résumé
+        # Display summary
         elapsed = time.time() - start_time
         print(f"\n{Fore.GREEN}Folder processing complete!{Style.RESET_ALL}")
         print(f"{Fore.CYAN}Processed {processed} items in {elapsed:.2f} seconds ({processed/elapsed:.2f} items/sec){Style.RESET_ALL}")
         ews_logger.add_log(f"Completed processing folder {folder.name}. Deleted {processed} items in {elapsed:.2f} seconds.")
         
-        # Réinitialiser les données de progression après avoir terminé
+        # Reset progress data after completion
         ews_unified_interface.reset_progress()
     
     except Exception as e:
         print(f"{Fore.RED}Error processing folder: {e}{Style.RESET_ALL}")
         ews_logger.add_log(f"Error processing folder: {e}", "ERROR")
-        # Réinitialiser les données de progression en cas d'erreur
+        # Reset progress data in case of error
         ews_unified_interface.reset_progress()
 
-# Créer des instances globales pour les logs et les statistiques
+# Create global instances for logs and statistics
 ews_logger = EWSLogger()
 ews_stats_window = EWSStatsWindow()
 
-# Créer une instance globale de l'interface unifiée
+# Create a global instance of the unified interface
 ews_unified_interface = EWSUnifiedInterface()
 
-# Fonction pour formater le temps en jours, heures, minutes, secondes
+# Function to format time in days, hours, minutes, seconds
 def format_time_remaining(seconds):
-    """Convertit un temps en secondes en format jours, heures, minutes, secondes"""
+    """Converts time in seconds to format days, hours, minutes, seconds"""
     if seconds <= 0:
         return "0s"
     
@@ -948,7 +948,7 @@ def format_time_remaining(seconds):
     
     result = ""
     if days > 0:
-        result += f"{days}j "
+        result += f"{days}d "
     if hours > 0 or days > 0:
         result += f"{hours}h "
     if minutes > 0 or hours > 0 or days > 0:
@@ -957,34 +957,34 @@ def format_time_remaining(seconds):
     
     return result
 
-# Fonction pour gérer l'interface dans un processus séparé
+# Function to handle the interface in a separate process
 def interface_process(command_queue, data_queue, log_queue, stop_event):
-    """Processus séparé qui gère l'interface utilisateur avec un affichage console simple"""
+    """Separate process that handles the user interface with a simple console display"""
     try:
-        # État de l'interface
+        # Interface state
         logs = []
         stats_data = None
-        ews_calls = []  # Pour stocker les appels EWS récents
-        max_calls_to_display = 20  # Nombre maximum d'appels à afficher
-        progress_data = None  # Pour stocker les informations de progression actuelle
-        progress_history = []  # Pour stocker l'historique des progressions
-        last_progress_time = 0  # Pour limiter la fréquence d'ajout à l'historique
+        ews_calls = []  # To store recent EWS calls
+        max_calls_to_display = 20  # Maximum number of calls to display
+        progress_data = None  # To store current progress information
+        progress_history = []  # To store progress history
+        last_progress_time = 0  # To limit frequency of adding to history
         
         print("\033[92m=== EWS Cleaner - Linux Edition ===\033[0m")
-        print("\033[36mMonitoring démarré. Appuyez sur Ctrl+C pour arrêter.\033[0m")
+        print("\033[36mMonitoring started. Press Ctrl+C to stop.\033[0m")
         print("-" * 80)
         
-        # Boucle principale
+        # Main loop
         while not stop_event.is_set():
             try:
-                # Vérifier les données
+                # Check data
                 if not data_queue.empty():
                     data = data_queue.get_nowait()
                     
                     if data["type"] == "stats":
                         stats_data = data
                         
-                        # Extraire les informations d'appel EWS
+                        # Extract EWS call information
                         if "call_types" in data["data"]:
                             for call_type, stats in data["data"]["call_types"].items():
                                 if "last_command" in stats and stats["last_command"]:
@@ -996,11 +996,11 @@ def interface_process(command_queue, data_queue, log_queue, stop_event):
                                         "details": stats["last_command"]
                                     })
                     elif data["type"] == "progress":
-                        # Mettre à jour les données de progression
+                        # Update progress data
                         progress_data = data["data"]
                         
-                        # Ajouter à l'historique de progression si c'est une progression active
-                        # et qu'au moins 5 secondes se sont écoulées depuis la dernière entrée
+                        # Add to progress history if it's active progress
+                        # and at least 5 seconds have passed since the last entry
                         current_time = time.time()
                         if progress_data and progress_data["active"] and (current_time - last_progress_time >= 5):
                             progress_entry = progress_data.copy()
@@ -1008,16 +1008,16 @@ def interface_process(command_queue, data_queue, log_queue, stop_event):
                             progress_history.append(progress_entry)
                             last_progress_time = current_time
                             
-                            # Limiter la taille de l'historique
-                            if len(progress_history) > 20:  # Conserver les 20 dernières entrées
+                            # Limit history size
+                            if len(progress_history) > 20:  # Keep the last 20 entries
                                 progress_history = progress_history[-20:]
                 
-                # Vérifier les logs
+                # Check logs
                 if not log_queue.empty():
                     log = log_queue.get_nowait()
                     logs.append(log)
                     
-                    # Si c'est un log d'appel EWS, l'ajouter aux appels
+                    # If it's an EWS call log, add it to the calls
                     if "EWS call" in log["message"]:
                         try:
                             parts = log["message"].split(" - ")
@@ -1036,43 +1036,43 @@ def interface_process(command_queue, data_queue, log_queue, stop_event):
                         except:
                             pass
                 
-                # Limiter les collections
+                # Limit collections
                 if len(logs) > 100:
                     logs = logs[-100:]
                 if len(ews_calls) > max_calls_to_display * 2:
                     ews_calls = ews_calls[-max_calls_to_display:]
                 
-                # Afficher les statistiques et derniers appels toutes les 2 secondes
+                # Display statistics and latest calls every 2 seconds
                 if stats_data and (time.time() % 2) < 0.1:
-                    # Effacer l'écran (compatible Linux)
+                    # Clear screen (Linux compatible)
                     print("\033c", end="")
                     
-                    # Afficher le logo
+                    # Display logo
                     print_logo()
                     
-                    # Date et heure actuelles
+                    # Current date and time
                     current_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                     print(f"\033[97m{current_time:^80}\033[0m")
                     print("-" * 80)
                     
-                    # Afficher les informations de progression si disponibles (progression actuelle)
+                    # Display progress information if available (current progress)
                     if progress_data and progress_data["active"]:
-                        print("\033[93m=== PROGRESSION DU TRAITEMENT ACTUEL ===\033[0m")
-                        print(f"Dossier: \033[96m{progress_data['folder_name']}\033[0m")
+                        print("\033[93m=== CURRENT PROCESSING PROGRESS ===\033[0m")
+                        print(f"Folder: \033[96m{progress_data['folder_name']}\033[0m")
                         formatted_time = format_time_remaining(progress_data['est_time'])
-                        print(f"Traités: \033[92m{progress_data['processed']}\033[0m éléments | " +
-                              f"Restants: \033[93m{progress_data['remaining']}\033[0m | " +
-                              f"Vitesse: \033[96m{progress_data['speed']:.2f}\033[0m items/sec | " +
-                              f"Temps restant: \033[95m{formatted_time}\033[0m")
+                        print(f"Processed: \033[92m{progress_data['processed']}\033[0m items | " +
+                              f"Remaining: \033[93m{progress_data['remaining']}\033[0m | " +
+                              f"Speed: \033[96m{progress_data['speed']:.2f}\033[0m items/sec | " +
+                              f"Time remaining: \033[95m{formatted_time}\033[0m")
                         print("-" * 80)
                     
-                    # Afficher l'historique des progressions
+                    # Display progress history
                     if progress_history:
-                        print("\033[93m=== HISTORIQUE DE PROGRESSION ===\033[0m")
-                        print(f"{'Heure':<10} {'Dossier':<20} {'Traités':<10} {'Restants':<10} {'Vitesse/s':<10} {'Temps rest.':<10}")
+                        print("\033[93m=== PROGRESS HISTORY ===\033[0m")
+                        print(f"{'Time':<10} {'Folder':<20} {'Processed':<10} {'Remaining':<10} {'Speed/s':<10} {'Time rem.':<10}")
                         print("-" * 80)
                         
-                        # Afficher les 5 dernières entrées d'historique en ordre inverse (le plus récent en haut)
+                        # Display the last 5 history entries in reverse order (most recent at the top)
                         for entry in reversed(progress_history[-5:]):
                             formatted_time = format_time_remaining(entry['est_time'])
                             print(f"{entry['timestamp']:<10} " +
@@ -1083,96 +1083,96 @@ def interface_process(command_queue, data_queue, log_queue, stop_event):
                                  f"\033[95m{formatted_time}\033[0m")
                         print("-" * 80)
                     
-                    # Afficher les statistiques
+                    # Display statistics
                     stats = stats_data["data"]["stats"]
-                    print("\033[96m--- Statistiques ---\033[0m")
-                    print(f"Appels actifs: \033[92m{stats['active']}\033[0m | Total: \033[92m{stats['count']}\033[0m")
+                    print("\033[96m--- Statistics ---\033[0m")
+                    print(f"Active calls: \033[92m{stats['active']}\033[0m | Total: \033[92m{stats['count']}\033[0m")
                     
                     if stats['count'] > 0:
                         min_time = stats['min']
                         avg_time = stats['avg']
                         max_time = stats['max']
                         
-                        # Coloriser selon les temps
-                        min_color = "\033[92m"  # Vert
-                        avg_color = "\033[92m"  # Vert par défaut
-                        max_color = "\033[92m"  # Vert par défaut
+                        # Colorize according to times
+                        min_color = "\033[92m"  # Green
+                        avg_color = "\033[92m"  # Green by default
+                        max_color = "\033[92m"  # Green by default
                         
                         if avg_time > 1000:
-                            avg_color = "\033[91m"  # Rouge
+                            avg_color = "\033[91m"  # Red
                         elif avg_time > 500:
-                            avg_color = "\033[93m"  # Jaune
+                            avg_color = "\033[93m"  # Yellow
                             
                         if max_time > 1000:
-                            max_color = "\033[91m"  # Rouge
+                            max_color = "\033[91m"  # Red
                         elif max_time > 500:
-                            max_color = "\033[93m"  # Jaune
+                            max_color = "\033[93m"  # Yellow
                         
                         print(f"Min: {min_color}{min_time:.2f}ms\033[0m | " +
                               f"Avg: {avg_color}{avg_time:.2f}ms\033[0m | " +
                               f"Max: {max_color}{max_time:.2f}ms\033[0m")
                     
-                    # Afficher les derniers logs
-                    print("\n\033[96m--- Logs récents ---\033[0m")
-                    for log in logs[-5:]:  # Limiter à 5 derniers logs
-                        color = "\033[92m"  # Vert par défaut
+                    # Display recent logs
+                    print("\n\033[96m--- Recent Logs ---\033[0m")
+                    for log in logs[-5:]:  # Limit to last 5 logs
+                        color = "\033[92m"  # Green by default
                         if log["level"] == "ERROR":
-                            color = "\033[91m"  # Rouge
+                            color = "\033[91m"  # Red
                         elif log["level"] == "WARN":
-                            color = "\033[93m"  # Jaune
+                            color = "\033[93m"  # Yellow
                         
                         print(f"[{log['timestamp']}] {color}{log['message']}\033[0m")
                     
-                    # Afficher les appels EWS récents
-                    print("\n\033[96m--- Monitoring des requêtes EWS ---\033[0m")
-                    print(f"{'Heure':<10} {'Type':<15} {'Temps (ms)':<12} {'Détails':<200}")
+                    # Display recent EWS calls
+                    print("\n\033[96m--- EWS Request Monitoring ---\033[0m")
+                    print(f"{'Time':<10} {'Type':<15} {'Time (ms)':<12} {'Details':<200}")
                     print("-" * 240)
                     
-                    # Limiter le nombre d'erreurs de chaque type pour éviter qu'elles restent affichées en permanence
-                    error_counts = {}  # Pour compter les erreurs de chaque type
+                    # Limit the number of errors of each type to avoid them remaining displayed permanently
+                    error_counts = {}  # To count errors of each type
                     filtered_calls = []
                     
-                    # Parcourir les appels récents et limiter les erreurs
-                    for call in ews_calls[-30:]:  # Considérer les 30 derniers appels
+                    # Go through recent calls and limit errors
+                    for call in ews_calls[-30:]:  # Consider the last 30 calls
                         call_type = call["type"]
                         
-                        # Si c'est une erreur, ne garder que la plus récente de chaque type
+                        # If it's an error, keep only the most recent of each type
                         if call_type.startswith("error_"):
                             if call_type not in error_counts:
                                 error_counts[call_type] = 0
                             
-                            # Ne garder qu'une seule erreur de chaque type
+                            # Keep only one error of each type
                             if error_counts[call_type] < 1:
                                 filtered_calls.append(call)
                                 error_counts[call_type] += 1
                         else:
-                            # Pour les appels normaux, les ajouter tous
+                            # For normal calls, add them all
                             filtered_calls.append(call)
                     
-                    # Ne garder que les 10 appels les plus récents après filtrage
+                    # Keep only the 10 most recent calls after filtering
                     recent_calls = sorted(filtered_calls[-10:], key=lambda x: x.get('timestamp', ''))
                     
-                    for call in reversed(recent_calls):  # Afficher les plus récents en premier
-                        # Coloriser selon le temps
-                        time_color = "\033[92m"  # Vert
+                    for call in reversed(recent_calls):  # Display most recent first
+                        # Colorize according to time
+                        time_color = "\033[92m"  # Green
                         if call["time"] > 1000:
-                            time_color = "\033[91m"  # Rouge
+                            time_color = "\033[91m"  # Red
                         elif call["time"] > 500:
-                            time_color = "\033[93m"  # Jaune
+                            time_color = "\033[93m"  # Yellow
                         
-                        # Tronquer les détails s'ils sont trop longs
+                        # Truncate details if too long
                         details = call["details"]
-                        if len(details) > 200:  # Augmenté à 200 caractères
+                        if len(details) > 200:  # Increased to 200 characters
                             details = details[:197] + "..."
                         
                         print(f"{call['timestamp']:<10} " +
                               f"\033[96m{call['type'][:15]:<15}\033[0m " +
                               f"{time_color}{call['time']:.2f}ms\033[0m ".ljust(12) +
-                              f"{details:<200}")  # Augmenté à 200 caractères
+                              f"{details:<200}")  # Increased to 200 characters
                     
-                    print("\n\033[36mAppuyez sur Ctrl+C pour arrêter le monitoring.\033[0m")
+                    print("\n\033[36mPress Ctrl+C to stop monitoring.\033[0m")
                 
-                # Petite pause pour éviter de consommer trop de CPU
+                # Small pause to avoid consuming too much CPU
                 time.sleep(0.1)
                 
             except queue.Empty:
@@ -1180,46 +1180,46 @@ def interface_process(command_queue, data_queue, log_queue, stop_event):
             except KeyboardInterrupt:
                 break
             except Exception as e:
-                print(f"\033[91mErreur dans l'interface: {e}\033[0m")
+                print(f"\033[91mError in interface: {e}\033[0m")
         
-        print("\033[92mMonitoring terminé.\033[0m")
+        print("\033[92mMonitoring finished.\033[0m")
     except Exception as e:
-        print(f"\033[91mErreur dans le processus d'interface: {e}\033[0m")
+        print(f"\033[91mError in interface process: {e}\033[0m")
         import traceback
         traceback.print_exc()
 
-# Modifier la fonction principale pour mettre en place le nouveau flux
+# Modify the main function to set up the new flow
 def main():
-    # S'assurer que le multiprocessing est correctement initialisé
+    # Ensure that multiprocessing is properly initialized
     multiprocessing.freeze_support()
     
-    # Afficher le logo
+    # Display the logo
     print_logo()
     
-    # Options en ligne de commande améliorées
+    # Enhanced command line options
     if len(sys.argv) > 1:
-        # Vérifier si --help est demandé
+        # Check if --help is requested
         if sys.argv[1] in ['-h', '--help']:
             print(f"{Fore.GREEN}Usage: {sys.argv[0]} [OPTIONS] [username] [password] [impersonated_user]{Style.RESET_ALL}")
             print(f"{Fore.CYAN}Options:{Style.RESET_ALL}")
-            print(f"  -h, --help          Affiche cette aide")
-            print(f"  --no-log-window     Désactive l'ouverture d'une fenêtre de log séparée")
-            print(f"  --console-log       Active l'affichage des logs dans la console principale")
-            print(f"  --no-stats-window   Désactive l'ouverture d'une fenêtre de statistiques séparée")
-            print(f"  --server SERVER     Spécifie le serveur Exchange")
-            print(f"  --classic-ui        Utilise l'interface classique au lieu de l'interface rich unifiée")
-            print(f"  --auto-monitor      Démarre automatiquement le monitoring EWS (sinon: activation manuelle)")
+            print(f"  -h, --help          Display this help")
+            print(f"  --no-log-window     Disable opening a separate log window")
+            print(f"  --console-log       Enable log display in the main console")
+            print(f"  --no-stats-window   Disable opening a separate statistics window")
+            print(f"  --server SERVER     Specify the Exchange server")
+            print(f"  --classic-ui        Use the classic interface instead of the rich unified interface")
+            print(f"  --auto-monitor      Automatically start EWS monitoring (otherwise: manual activation)")
             sys.exit(0)
     
-    # Traiter les options
-    server = ''  # Serveur à spécifier obligatoirement
+    # Process options
+    server = ''  # Server must be specified
     show_log_window = True
     show_stats_window = True
     console_log = False
     use_unified_interface = True
-    auto_monitor = False  # Par défaut, ne pas démarrer le monitoring automatiquement
+    auto_monitor = False  # By default, don't start monitoring automatically
     
-    # Filtrer les arguments pour extraire les options
+    # Filter arguments to extract options
     filtered_args = []
     i = 1
     while i < len(sys.argv):
@@ -1240,18 +1240,18 @@ def main():
             filtered_args.append(sys.argv[i])
         i += 1
     
-    # Créer et configurer le logger EWS
+    # Create and configure the EWS logger
     ews_logger.log_to_console = console_log
     
-    # Afficher la fenêtre de logs EWS si demandé
+    # Display the EWS logs window if requested
     if show_log_window:
         ews_logger.show_log_window()
     
-    # Afficher la fenêtre de statistiques si demandé
+    # Display the statistics window if requested
     if show_stats_window:
         ews_stats_window.show_stats_window()
     
-    # Vérifier les arguments de connexion
+    # Check connection arguments
     if len(filtered_args) >= 2:
         username = filtered_args[0]
         password = filtered_args[1]
@@ -1267,14 +1267,14 @@ def main():
             impersonated_user = input(f"{Fore.GREEN}Enter email address to impersonate: {Style.RESET_ALL}")
 
     try:
-        # Avant de se connecter au serveur, installer l'intercepteur d'appels EWS
+        # Before connecting to the server, install the EWS call interceptor
         intercept_ews_calls()
-        print(f"{Fore.CYAN}Monitoring individuel des appels EWS activé{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}Individual monitoring of EWS calls enabled{Style.RESET_ALL}")
         
         # Connect to account
         print(f"\n{Fore.CYAN}Connecting to Exchange server {server}...{Style.RESET_ALL}")
         
-        # Mettre à jour la fonction connect_to_account pour utiliser le serveur spécifié
+        # Update the connect_to_account function to use the specified server
         def connect_with_server(username, password, impersonated_user=None):
             credentials = Credentials(username, password)
             config = Configuration(server=server, credentials=credentials)
@@ -1298,10 +1298,10 @@ def main():
         print(f"{Fore.GREEN}Connected successfully to {Fore.YELLOW}{account.primary_smtp_address}{Style.RESET_ALL}")
         
         if use_unified_interface:
-            # Utiliser l'interface unifiée mais SANS démarrer le monitoring automatiquement
+            # Use the unified interface but WITHOUT starting monitoring automatically
             ews_unified_interface.start(start_monitoring=auto_monitor)
             
-            # Récupérer la liste des dossiers
+            # Get the list of folders
             print(f"\n{Fore.CYAN}Listing folders...{Style.RESET_ALL}")
             folders = []
             for i, folder in enumerate(account.root.walk(), 1):
@@ -1315,138 +1315,138 @@ def main():
                 folders.append(folder_info)
                 ews_unified_interface.add_log(f"Found folder: {folder.name} ({folder.total_count} items)")
             
-            # Envoyer les dossiers à l'interface
+            # Send folders to the interface
             ews_unified_interface.add_folders(folders)
             
-            # Variable pour suivre l'état de l'interface
-            current_view = "main"  # "main" ou "stats"
+            # Variable to track interface state
+            current_view = "main"  # "main" or "stats"
             
-            # Afficher les instructions
-            print(f"\n{Fore.YELLOW}======= COMMANDES DISPONIBLES ======={Style.RESET_ALL}")
-            print(f"{Fore.CYAN}Entrez une commande:{Style.RESET_ALL}")
-            print(f"{Fore.GREEN}  1-9{Style.RESET_ALL} : Sélectionner un dossier par son numéro")
-            print(f"{Fore.GREEN}  m{Style.RESET_ALL}   : Activer/désactiver le monitoring EWS")
-            print(f"{Fore.GREEN}  s{Style.RESET_ALL}   : Afficher les statistiques EWS")
-            print(f"{Fore.GREEN}  q{Style.RESET_ALL}   : Quitter le programme")
+            # Display instructions
+            print(f"\n{Fore.YELLOW}======= AVAILABLE COMMANDS ======={Style.RESET_ALL}")
+            print(f"{Fore.CYAN}Enter a command:{Style.RESET_ALL}")
+            print(f"{Fore.GREEN}  1-9{Style.RESET_ALL} : Select a folder by its number")
+            print(f"{Fore.GREEN}  m{Style.RESET_ALL}   : Enable/disable EWS monitoring")
+            print(f"{Fore.GREEN}  s{Style.RESET_ALL}   : Display EWS statistics")
+            print(f"{Fore.GREEN}  q{Style.RESET_ALL}   : Quit the program")
             
-            # Afficher les dossiers
-            print(f"\n{Fore.YELLOW}======= DOSSIERS DISPONIBLES ======={Style.RESET_ALL}")
+            # Display folders
+            print(f"\n{Fore.YELLOW}======= AVAILABLE FOLDERS ======={Style.RESET_ALL}")
             for i, folder in enumerate(folders, 1):
                 print(f"{Fore.WHITE}{i}. {Fore.GREEN}{folder['name']} {Fore.CYAN}({folder['total_count']} items){Style.RESET_ALL}")
             
-            # Utiliser un mode d'entrée simple pour Linux qui est plus fiable
-            print(f"\n{Fore.YELLOW}Mode d'entrée standard pour Linux activé.{Style.RESET_ALL}")
+            # Use a simple input mode for Linux which is more reliable
+            print(f"\n{Fore.YELLOW}Standard input mode for Linux activated.{Style.RESET_ALL}")
             
-            # Boucle principale pour traiter les commandes de l'interface
+            # Main loop to process interface commands
             try:
                 while True:
-                    # Afficher le prompt et attendre l'entrée
-                    user_input = input(f"{Fore.GREEN}Commande > {Style.RESET_ALL}").strip().lower()
+                    # Display prompt and wait for input
+                    user_input = input(f"{Fore.GREEN}Command > {Style.RESET_ALL}").strip().lower()
                     
-                    # Aucune entrée, continuer
+                    # No input, continue
                     if not user_input:
                         continue
                     
-                    # Prendre le premier caractère comme commande
+                    # Take the first character as the command
                     key = user_input[0]
                     
-                    # Traiter la commande
+                    # Process the command
                     if key == 'q':
-                        # Quitter l'application
+                        # Quit the application
                         if current_view == "stats":
-                            # Si on est en mode stats, revenir au menu
+                            # If in stats mode, return to the menu
                             ews_stats_window.exit_stats_window()
                             current_view = "main"
-                            print(f"\n{Fore.YELLOW}======= DE RETOUR AU MENU PRINCIPAL ======={Style.RESET_ALL}")
-                            print(f"{Fore.CYAN}Utilisez 's' pour voir les statistiques ou 'q' pour quitter{Style.RESET_ALL}")
+                            print(f"\n{Fore.YELLOW}======= BACK TO MAIN MENU ======={Style.RESET_ALL}")
+                            print(f"{Fore.CYAN}Use 's' to see statistics or 'q' to quit{Style.RESET_ALL}")
                         else:
-                            # Sinon quitter l'application
-                            print(f"\n{Fore.YELLOW}Sortie du programme...{Style.RESET_ALL}")
+                            # Otherwise quit the application
+                            print(f"\n{Fore.YELLOW}Exiting program...{Style.RESET_ALL}")
                             break
                     elif key == 'm':
-                        # Activer/désactiver le monitoring EWS
+                        # Enable/disable EWS monitoring
                         if ews_unified_interface.monitoring_active:
-                            # Désactiver le monitoring
+                            # Disable monitoring
                             ews_unified_interface.stop()
                             ews_unified_interface.start(start_monitoring=False)
-                            print(f"{Fore.YELLOW}Monitoring EWS désactivé{Style.RESET_ALL}")
+                            print(f"{Fore.YELLOW}EWS monitoring disabled{Style.RESET_ALL}")
                         else:
-                            # Activer le monitoring
+                            # Enable monitoring
                             if ews_unified_interface.start_monitoring():
-                                print(f"{Fore.GREEN}Monitoring EWS activé. Les requêtes EWS seront affichées dans une fenêtre séparée.{Style.RESET_ALL}")
+                                print(f"{Fore.GREEN}EWS monitoring enabled. EWS requests will be displayed in a separate window.{Style.RESET_ALL}")
                             else:
-                                print(f"{Fore.RED}Impossible d'activer le monitoring EWS.{Style.RESET_ALL}")
+                                print(f"{Fore.RED}Unable to enable EWS monitoring.{Style.RESET_ALL}")
                     elif key == 's' and current_view == "main":
-                        # Afficher les statistiques
+                        # Display statistics
                         current_view = "stats"
-                        print(f"\n{Fore.YELLOW}======= AFFICHAGE DES STATISTIQUES ======={Style.RESET_ALL}")
-                        print(f"{Fore.CYAN}Utilisez 'q' pour revenir au menu principal{Style.RESET_ALL}")
+                        print(f"\n{Fore.YELLOW}======= DISPLAYING STATISTICS ======={Style.RESET_ALL}")
+                        print(f"{Fore.CYAN}Use 'q' to return to the main menu{Style.RESET_ALL}")
                         ews_stats_window.show_stats_window()
                     elif key.isdigit() and current_view == "main":
-                        # Essayer de convertir l'entrée complète en cas de numéro à plusieurs chiffres
+                        # Try to convert the complete input in case of multi-digit number
                         try:
                             folder_num = int(user_input)
                             if 1 <= folder_num <= len(folders):
                                 selected_folder = folders[folder_num-1]
-                                print(f"\n{Fore.YELLOW}Traitement du dossier: {Fore.GREEN}{selected_folder['name']}{Style.RESET_ALL}")
+                                print(f"\n{Fore.YELLOW}Processing folder: {Fore.GREEN}{selected_folder['name']}{Style.RESET_ALL}")
                                 
-                                # Demander confirmation
-                                print(f"{Fore.RED}Voulez-vous vraiment vider ce dossier contenant {selected_folder['total_count']} éléments? (o/n){Style.RESET_ALL}")
+                                # Ask for confirmation
+                                print(f"{Fore.RED}Do you really want to empty this folder containing {selected_folder['total_count']} items? (y/n){Style.RESET_ALL}")
                                 
-                                # Lire la confirmation
+                                # Read confirmation
                                 confirm = input(f"{Fore.GREEN}Confirmation > {Style.RESET_ALL}").strip().lower()
                                 
-                                if confirm == 'o':
-                                    # Activer le monitoring si ce n'est pas déjà fait
+                                if confirm == 'y':
+                                    # Enable monitoring if not already done
                                     if not ews_unified_interface.monitoring_active:
-                                        print(f"{Fore.YELLOW}Activation du monitoring EWS pour le suivi des opérations...{Style.RESET_ALL}")
+                                        print(f"{Fore.YELLOW}Enabling EWS monitoring to track operations...{Style.RESET_ALL}")
                                         ews_unified_interface.start_monitoring()
-                                        time.sleep(1)  # Laisser le temps au monitoring de démarrer
+                                        time.sleep(1)  # Allow time for monitoring to start
                                     
-                                    # Vider le dossier
+                                    # Empty the folder
                                     try:
                                         empty_folder(selected_folder["object"])
-                                        print(f"\n{Fore.GREEN}Opération terminée.{Style.RESET_ALL}")
+                                        print(f"\n{Fore.GREEN}Operation completed.{Style.RESET_ALL}")
                                     except Exception as e:
-                                        print(f"\n{Fore.RED}Erreur: {e}{Style.RESET_ALL}")
+                                        print(f"\n{Fore.RED}Error: {e}{Style.RESET_ALL}")
                                 else:
-                                    print(f"\n{Fore.YELLOW}Opération annulée.{Style.RESET_ALL}")
+                                    print(f"\n{Fore.YELLOW}Operation cancelled.{Style.RESET_ALL}")
                             else:
-                                print(f"{Fore.RED}Numéro de dossier invalide. Veuillez entrer un nombre entre 1 et {len(folders)}.{Style.RESET_ALL}")
+                                print(f"{Fore.RED}Invalid folder number. Please enter a number between 1 and {len(folders)}.{Style.RESET_ALL}")
                         except ValueError:
-                            print(f"{Fore.RED}Entrée invalide. Veuillez entrer un nombre pour sélectionner un dossier.{Style.RESET_ALL}")
+                            print(f"{Fore.RED}Invalid input. Please enter a number to select a folder.{Style.RESET_ALL}")
                     elif key == 'h' or key == '?':
-                        # Afficher l'aide
-                        print(f"\n{Fore.YELLOW}======= AIDE ======={Style.RESET_ALL}")
-                        print(f"{Fore.CYAN}Commandes disponibles:{Style.RESET_ALL}")
-                        print(f"{Fore.GREEN}  1-9{Style.RESET_ALL} : Sélectionner un dossier par son numéro")
-                        print(f"{Fore.GREEN}  m{Style.RESET_ALL}   : Activer/désactiver le monitoring EWS")
-                        print(f"{Fore.GREEN}  s{Style.RESET_ALL}   : Afficher les statistiques EWS")
-                        print(f"{Fore.GREEN}  q{Style.RESET_ALL}   : Quitter le programme")
-                        print(f"{Fore.GREEN}  h, ?{Style.RESET_ALL} : Afficher cette aide")
+                        # Display help
+                        print(f"\n{Fore.YELLOW}======= HELP ======={Style.RESET_ALL}")
+                        print(f"{Fore.CYAN}Available commands:{Style.RESET_ALL}")
+                        print(f"{Fore.GREEN}  1-9{Style.RESET_ALL} : Select a folder by its number")
+                        print(f"{Fore.GREEN}  m{Style.RESET_ALL}   : Enable/disable EWS monitoring")
+                        print(f"{Fore.GREEN}  s{Style.RESET_ALL}   : Display EWS statistics")
+                        print(f"{Fore.GREEN}  q{Style.RESET_ALL}   : Quit the program")
+                        print(f"{Fore.GREEN}  h, ?{Style.RESET_ALL} : Display this help")
                     else:
-                        print(f"{Fore.RED}Commande non reconnue. Tapez 'h' pour afficher l'aide.{Style.RESET_ALL}")
+                        print(f"{Fore.RED}Command not recognized. Type 'h' to display help.{Style.RESET_ALL}")
                     
-                    # Vérifier si l'utilisateur a demandé de quitter les statistiques
+                    # Check if the user requested to quit statistics
                     if ews_stats_window.user_exit_requested:
                         ews_stats_window.user_exit_requested = False
                         current_view = "main"
-                        print(f"\n{Fore.YELLOW}======= DE RETOUR AU MENU PRINCIPAL ======={Style.RESET_ALL}")
-                        print(f"{Fore.CYAN}Utilisez 's' pour voir les statistiques ou 'q' pour quitter{Style.RESET_ALL}")
+                        print(f"\n{Fore.YELLOW}======= BACK TO MAIN MENU ======={Style.RESET_ALL}")
+                        print(f"{Fore.CYAN}Use 's' to see statistics or 'q' to quit{Style.RESET_ALL}")
                     
-                    # Traiter les commandes de l'interface unifiée
+                    # Process unified interface commands
                     command = ews_unified_interface.get_command(timeout=0.1)
                     if command:
                         if command["command"] == "quit":
                             break
                         elif command["command"] == "stats":
-                            # Passer à la vue statistiques
+                            # Switch to statistics view
                             if current_view != "stats":
                                 ews_stats_window.show_stats_window()
                                 current_view = "stats"
-                                print(f"{Fore.YELLOW}Affichage des statistiques EWS. Utilisez 'q' pour revenir au menu principal.{Style.RESET_ALL}")
+                                print(f"{Fore.YELLOW}Displaying EWS statistics. Use 'q' to return to main menu.{Style.RESET_ALL}")
                         elif command["command"] == "main":
-                            # Revenir à la vue principale
+                            # Return to main view
                             if current_view != "main":
                                 ews_stats_window.exit_stats_window()
                                 current_view = "main"
@@ -1455,7 +1455,7 @@ def main():
                             if 0 <= folder_index < len(folders):
                                 selected_folder = folders[folder_index]
 
-                                # Informer l'interface que le traitement commence
+                                # Inform the interface that processing is starting
                                 ews_unified_interface.data_queue.put({
                                     "type": "processing_start",
                                     "data": {"folder": selected_folder}
@@ -1463,7 +1463,7 @@ def main():
 
                                 ews_unified_interface.add_log(f"Starting processing of folder: {selected_folder['name']}", "INFO")
 
-                                # Lancer le traitement
+                                # Start processing
                                 try:
                                     # Empty the folder
                                     empty_folder(selected_folder["object"])
@@ -1472,7 +1472,7 @@ def main():
                                 except Exception as e:
                                     ews_unified_interface.add_log(f"Error processing folder: {e}", "ERROR")
 
-                                # Informer l'interface que le traitement est terminé
+                                # Inform the interface that processing is complete
                                 ews_unified_interface.data_queue.put({
                                     "type": "processing_end",
                                     "data": {"success": True}
@@ -1480,12 +1480,12 @@ def main():
                         elif command["command"] == "cancel_processing":
                             ews_unified_interface.add_log("Processing cancelled by user", "WARN")
 
-                    # Petite pause pour éviter de consommer trop de CPU
+                    # Small pause to avoid consuming too much CPU
                     time.sleep(0.1)
             finally:
-                pass  # Aucune restauration nécessaire en mode d'entrée standard
+                pass  # No restoration needed in standard input mode
         else:
-            # Interface classique (code existant)
+            # Classic interface (existing code)
             # List folders and let user choose
             folders = list_folders(account)
             while True:
@@ -1515,14 +1515,14 @@ def main():
     except Exception as e:
         print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
     finally:
-        # Arrêter tous les processus
+        # Stop all processes
         if use_unified_interface:
             ews_unified_interface.stop()
         else:
             ews_logger.stop()
             ews_stats_window.stop()
 
-        # Attendre un moment pour permettre de voir les statistiques
+        # Wait a moment to allow seeing the statistics
         print(f"\n{Fore.GREEN}Program completed.{Style.RESET_ALL}")
 
 
