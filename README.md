@@ -32,7 +32,7 @@ git clone https://github.com/yourusername/exchange-cleaner.git
 2. Install the required dependencies:
 
 ```bash
-pip install -r requirements.txt
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ ews-folder-cleaner==1.0.0
 ```
 
 ## Usage
