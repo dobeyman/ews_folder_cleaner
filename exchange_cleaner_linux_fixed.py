@@ -1188,6 +1188,19 @@ def interface_process(command_queue, data_queue, log_queue, stop_event):
 
 # Modify the main function to set up the new flow
 def main():
+    # Check for --gui flag first, which will run the graphical interface
+    if '--gui' in sys.argv:
+        try:
+            from gui import App
+            app = App()
+            app.mainloop()
+        except ImportError as e:
+            print(f"{Fore.RED}Could not launch GUI. Make sure all dependencies are installed (pip install -r requirements.txt).{Style.RESET_ALL}")
+            print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
+        except Exception as e:
+            print(f"{Fore.RED}An unexpected error occurred while running the GUI: {e}{Style.RESET_ALL}")
+        sys.exit(0)
+
     # Ensure that multiprocessing is properly initialized
     multiprocessing.freeze_support()
     
@@ -1200,6 +1213,7 @@ def main():
         if sys.argv[1] in ['-h', '--help']:
             print(f"{Fore.GREEN}Usage: {sys.argv[0]} [OPTIONS] [username] [password] [impersonated_user]{Style.RESET_ALL}")
             print(f"{Fore.CYAN}Options:{Style.RESET_ALL}")
+            print(f"  --gui               Launch the graphical user interface")
             print(f"  -h, --help          Display this help")
             print(f"  --no-log-window     Disable opening a separate log window")
             print(f"  --console-log       Enable log display in the main console")
